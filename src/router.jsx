@@ -7,12 +7,15 @@ import Maths from "./pages/Maths";
 import Search from "./pages/Search";
 import Player from "./pages/Player";
 import Dashboard from "./pages/Dashboard";
+import Search from "./pages/Search";
 
 const router = createBrowserRouter([
   {
     path: "/",
     element: <Home />,
   },
+  path: "/search",
+    element: <Search />,
   {
     path: "/physics",
     element: <Physics />,
