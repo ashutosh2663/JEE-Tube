@@ -1,17 +1,20 @@
 import { useState } from "react";
 
 import SearchBar from "../components/search/SearchBar";
-import VideoCard from "../components/cards/VideoCard";
-
+import VideoCard from "../components/search/VideoCard";
 import { searchYoutube } from "../api/youtube";
 
 export default function Search() {
   const [videos, setVideos] = useState([]);
 
   async function handleSearch(query) {
-    const result = await searchYoutube(query);
-
-    setVideos(result);
+    try {
+      const result = await searchYoutube(query);
+      setVideos(result);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to fetch YouTube videos.");
+    }
   }
 
   return (
@@ -21,8 +24,9 @@ export default function Search() {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fill,minmax(320px,1fr))",
+          gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
           gap: "25px",
+          marginTop: "20px",
         }}
       >
         {videos.map((video) => (

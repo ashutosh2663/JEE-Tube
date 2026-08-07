@@ -1,34 +1,35 @@
 export default function VideoCard({ video }) {
-  const id = video.id.videoId;
-  const s = video.snippet;
+  const { snippet, id } = video;
 
   return (
     <div
       style={{
         background: "#181818",
-        borderRadius: "14px",
+        borderRadius: "12px",
         overflow: "hidden",
+        color: "white",
       }}
     >
       <img
-        src={s.thumbnails.high.url}
-        alt={s.title}
+        src={snippet.thumbnails.high.url}
+        alt={snippet.title}
         style={{
           width: "100%",
+          display: "block",
         }}
       />
 
       <div style={{ padding: "15px" }}>
-        <h3>{s.title}</h3>
+        <h3>{snippet.title}</h3>
 
-        <p>{s.channelTitle}</p>
+        <p>{snippet.channelTitle}</p>
 
         <a
-          href={`https://youtube.com/watch?v=${id}`}
+          href={`https://www.youtube.com/watch?v=${id.videoId}`}
           target="_blank"
           rel="noreferrer"
         >
-          Watch
+          ▶ Watch
         </a>
       </div>
     </div>

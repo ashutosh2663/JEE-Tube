@@ -1,6 +1,6 @@
 const API_KEY = import.meta.env.VITE_YOUTUBE_API_KEY;
 
-export async function searchVideos(query) {
+export async function searchYoutube(query) {
   const url =
     `https://www.googleapis.com/youtube/v3/search` +
     `?part=snippet` +
