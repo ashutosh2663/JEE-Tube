@@ -1,69 +1,56 @@
-*{
-  margin:0;
-  padding:0;
-  box-sizing:border-box;
+
+/* JEE-Tube Netflix-style horizontal rows */
+
+.subject-row {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 4px 2px 14px;
+  scroll-behavior: smooth;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
 }
 
-body{
-  font-family:Arial, Helvetica, sans-serif;
-  background:#0b0b0b;
-  overflow:hidden;
+.subject-row::-webkit-scrollbar {
+  height: 6px;
 }
 
-.app{
-  width:100vw;
-  height:100vh;
-  display:flex;
-  justify-content:center;
-  align-items:center;
-  position:relative;
+.subject-row::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-.background{
-  position:absolute;
-  inset:0;
-  background:
-      radial-gradient(circle at top,#e50914 0%,transparent 35%),
-      linear-gradient(#111,#000);
-  filter:blur(50px);
-  opacity:.35;
+.subject-row::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 20px;
 }
 
-.content{
-  z-index:2;
-  text-align:center;
+.subject-row-card {
+  flex: 0 0 280px;
+  scroll-snap-align: start;
 }
 
-.logo{
-  font-size:80px;
-  color:white;
-  font-weight:900;
-  letter-spacing:3px;
+@media (max-width: 768px) {
+  .subject-row {
+    gap: 12px;
+    scrollbar-width: none;
+  }
+
+  .subject-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  .subject-row-card {
+    flex: 0 0 230px;
+  }
 }
 
-.logo span{
-  color:#E50914;
-}
+@media (max-width: 480px) {
+  .subject-row {
+    gap: 10px;
+  }
 
-.tagline{
-  margin-top:15px;
-  color:#bfbfbf;
-  font-size:22px;
-}
-
-.enterBtn{
-  margin-top:45px;
-  padding:18px 50px;
-  background:#E50914;
-  border:none;
-  color:white;
-  border-radius:8px;
-  font-size:20px;
-  cursor:pointer;
-  transition:.3s;
-}
-
-.enterBtn:hover{
-  transform:scale(1.06);
-  background:#ff1b29;
+  .subject-row-card {
+    flex: 0 0 190px;
+  }
 }

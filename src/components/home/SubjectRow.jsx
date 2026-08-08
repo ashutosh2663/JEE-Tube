@@ -1,49 +1,65 @@
-import subjects from "../../data/subjects";
-import Card from "../common/Card";
 
-export default function SubjectRow() {
+import VideoCard from "../search/VideoCard";
 
-return(
+export default function SubjectRow({ title, videos = [] }) {
+  if (!videos.length) return null;
 
-<section style={{marginTop:40}}>
+  return (
+    <section style={styles.section}>
+      <div style={styles.header}>
+        <h2 style={styles.title}>{title}</h2>
 
-<h2 style={{marginBottom:25}}>Continue Learning</h2>
+        <button style={styles.seeAll}>
+          See all →
+        </button>
+      </div>
 
-<div
-style={{
-display:"flex",
-gap:"22px",
-overflowX:"auto",
-paddingBottom:"15px"
-}}
->
+      <div className="subject-row">
+        {videos.map((video, index) => {
+          const videoId =
+            video?.id?.videoId ||
+            video?.id ||
+            video?.videoId;
 
-{
+          if (!videoId) return null;
 
-subjects.map(subject=>(
-
-<Card
-
-key={subject.id}
-
-title={subject.title}
-
-teacher={subject.teacher}
-
-duration={subject.duration}
-
-color={subject.color}
-
-/>
-
-))
-
+          return (
+            <div className="subject-row-card" key={videoId || index}>
+              <VideoCard video={video} />
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
 }
 
-</div>
+const styles = {
+  section: {
+    marginTop: "32px",
+    width: "100%",
+  },
 
-</section>
+  header: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: "14px",
+  },
 
-);
+  title: {
+    margin: 0,
+    fontSize: "22px",
+    fontWeight: 700,
+    color: "#fff",
+  },
 
-}
+  seeAll: {
+    background: "transparent",
+    border: "none",
+    color: "#999",
+    cursor: "pointer",
+    fontSize: "13px",
+  },
+};
+

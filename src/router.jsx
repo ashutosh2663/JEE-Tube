@@ -1,3 +1,4 @@
+
 import { createBrowserRouter } from "react-router-dom";
 
 import Home from "./pages/Home";
@@ -30,7 +31,7 @@ const router = createBrowserRouter([
     element: <Search />,
   },
   {
-    path: "/player",
+    path: "/player/:videoId",
     element: <Player />,
   },
   {

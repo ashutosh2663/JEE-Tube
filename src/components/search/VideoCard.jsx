@@ -1,37 +1,101 @@
+import { useNavigate } from "react-router-dom";
+
 export default function VideoCard({ video }) {
-  const { snippet, id } = video;
+  const navigate = useNavigate();
+
+  const videoId = video?.id?.videoId;
+  const snippet = video?.snippet;
+
+  if (!videoId || !snippet) return null;
+
+  function openVideo() {
+    navigate(`/player/${videoId}`);
+  }
 
   return (
-    <div
+    <article
+      className="jt-row-card"
+      onClick={openVideo}
       style={{
-        background: "#181818",
+        background: "#171717",
         borderRadius: "12px",
         overflow: "hidden",
-        color: "white",
+        cursor: "pointer",
+        transition: "transform 0.2s ease, background 0.2s ease",
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = "scale(1.04)";
+        e.currentTarget.style.background = "#202020";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = "scale(1)";
+        e.currentTarget.style.background = "#171717";
       }}
     >
-      <img
-        src={snippet.thumbnails.high.url}
-        alt={snippet.title}
+      <div
         style={{
-          width: "100%",
-          display: "block",
+          position: "relative",
+          aspectRatio: "16 / 9",
+          background: "#222",
         }}
-      />
+      >
+        <img
+          src={
+            snippet.thumbnails?.medium?.url ||
+            snippet.thumbnails?.default?.url
+          }
+          alt={snippet.title}
+          loading="lazy"
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            display: "block",
+          }}
+        />
 
-      <div style={{ padding: "15px" }}>
-        <h3>{snippet.title}</h3>
-
-        <p>{snippet.channelTitle}</p>
-
-        <a
-          href={`https://www.youtube.com/watch?v=${id.videoId}`}
-          target="_blank"
-          rel="noreferrer"
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "rgba(0,0,0,0.25)",
+            opacity: 0,
+            transition: "opacity 0.2s",
+          }}
+          className="jt-play-overlay"
         >
-          ▶ Watch
-        </a>
+          <span style={{ fontSize: "42px" }}>▶</span>
+        </div>
       </div>
-    </div>
+
+      <div style={{ padding: "12px" }}>
+        <h3
+          style={{
+            margin: "0 0 7px",
+            fontSize: "15px",
+            lineHeight: 1.35,
+            display: "-webkit-box",
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: "vertical",
+            overflow: "hidden",
+          }}
+        >
+          {snippet.title}
+        </h3>
+
+        <p
+          style={{
+            margin: 0,
+            color: "#aaa",
+            fontSize: "13px",
+          }}
+        >
+          {snippet.channelTitle}
+        </p>
+      </div>
+    </article>
   );
 }
