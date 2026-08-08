@@ -1,658 +1,519 @@
 
-import { useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import Layout from "../components/layout/Layout";
+import "../styles/player.css";
 
-const PLAYER_HEIGHT = "min(62vw, 680px)";
+const STORAGE_KEY = "jee-tube-player-notes";
+
+const MARKER_TYPES = {
+  bookmark: {
+    label: "Bookmark",
+    icon: "🔖",
+  },
+  note: {
+    label: "Note",
+    icon: "📝",
+  },
+  doubt: {
+    label: "Doubt",
+    icon: "❓",
+  },
+  pyq: {
+    label: "PYQ",
+    icon: "🎯",
+  },
+};
 
 function formatTime(seconds) {
-  if (!Number.isFinite(seconds)) return "00:00";
+  const value = Math.max(0, Number(seconds) || 0);
 
-  const total = Math.floor(seconds);
-  const minutes = Math.floor(total / 60);
-  const secs = total % 60;
+  const hours = Math.floor(value / 3600);
+  const minutes = Math.floor((value % 3600) / 60);
+  const secs = Math.floor(value % 60);
 
-  return `${String(minutes).padStart(2, "0")}:${String(secs).padStart(
-    2,
-    "0"
-  )}`;
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, "0")}:${String(
+      secs
+    ).padStart(2, "0")}`;
+  }
+
+  return `${minutes}:${String(secs).padStart(2, "0")}`;
+}
+
+function loadSavedMarkers(videoId) {
+  try {
+    const saved = JSON.parse(
+      localStorage.getItem(STORAGE_KEY) || "{}"
+    );
+
+    return saved[videoId] || [];
+  } catch {
+    return [];
+  }
+}
+
+function saveMarkers(videoId, markers) {
+  try {
+    const saved = JSON.parse(
+      localStorage.getItem(STORAGE_KEY) || "{}"
+    );
+
+    saved[videoId] = markers;
+
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify(saved)
+    );
+  } catch (error) {
+    console.error("Could not save player markers:", error);
+  }
 }
 
 export default function Player() {
   const { videoId } = useParams();
-
-  const playerRef = useRef(null);
-  const intervalRef = useRef(null);
-
-  const [playerReady, setPlayerReady] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
+  const navigate = useNavigate();
 
   const [markers, setMarkers] = useState([]);
+  const [activeType, setActiveType] = useState("bookmark");
   const [noteText, setNoteText] = useState("");
-  const [markerType, setMarkerType] = useState("note");
+  const [showNotes, setShowNotes] = useState(true);
+  const [isPlaying, setIsPlaying] = useState(false);
 
-  const storageKey = `jee-tube-markers-${videoId}`;
+  /*
+   * In the current version we use the video's current timestamp
+   * as supplied by the player API in the future.
+   *
+   * Until the IFrame Player API is connected, this starts at 0.
+   */
+  const [currentTime, setCurrentTime] = useState(0);
 
-  /* Load saved markers */
   useEffect(() => {
     if (!videoId) return;
 
-    try {
-      const saved = localStorage.getItem(storageKey);
-
-      if (saved) {
-        setMarkers(JSON.parse(saved));
-      } else {
-        setMarkers([]);
-      }
-    } catch {
-      setMarkers([]);
-    }
-  }, [videoId, storageKey]);
-
-  /* Save markers */
-  useEffect(() => {
-    if (!videoId) return;
-
-    localStorage.setItem(storageKey, JSON.stringify(markers));
-  }, [markers, videoId, storageKey]);
-
-  /* Load YouTube IFrame API */
-  useEffect(() => {
-    let cancelled = false;
-
-    function createPlayer() {
-      if (
-        cancelled ||
-        !window.YT ||
-        !window.YT.Player ||
-        playerRef.current
-      ) {
-        return;
-      }
-
-      playerRef.current = new window.YT.Player("jee-tube-youtube-player", {
-        videoId,
-
-        playerVars: {
-          autoplay: 0,
-          controls: 1,
-          rel: 0,
-          modestbranding: 1,
-          playsinline: 1,
-          enablejsapi: 1,
-        },
-
-        events: {
-          onReady: (event) => {
-            if (cancelled) return;
-
-            setPlayerReady(true);
-            setDuration(event.target.getDuration());
-
-            intervalRef.current = setInterval(() => {
-              if (event.target && event.target.getCurrentTime) {
-                setCurrentTime(event.target.getCurrentTime());
-              }
-            }, 500);
-          },
-
-          onStateChange: (event) => {
-            if (event.target && event.target.getDuration) {
-              setDuration(event.target.getDuration());
-            }
-          },
-        },
-      });
-    }
-
-    if (window.YT && window.YT.Player) {
-      createPlayer();
-    } else {
-      const previousCallback = window.onYouTubeIframeAPIReady;
-
-      window.onYouTubeIframeAPIReady = () => {
-        if (previousCallback) previousCallback();
-        createPlayer();
-      };
-
-      if (!document.getElementById("youtube-iframe-api")) {
-        const script = document.createElement("script");
-
-        script.id = "youtube-iframe-api";
-        script.src = "https://www.youtube.com/iframe_api";
-        script.async = true;
-
-        document.body.appendChild(script);
-      }
-    }
-
-    return () => {
-      cancelled = true;
-
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-
-      if (
-        playerRef.current &&
-        typeof playerRef.current.destroy === "function"
-      ) {
-        playerRef.current.destroy();
-      }
-
-      playerRef.current = null;
-      setPlayerReady(false);
-    };
+    setMarkers(loadSavedMarkers(videoId));
+    setCurrentTime(0);
   }, [videoId]);
 
-  function getCurrentVideoTime() {
-    if (
-      playerRef.current &&
-      typeof playerRef.current.getCurrentTime === "function"
-    ) {
-      return playerRef.current.getCurrentTime();
-    }
+  useEffect(() => {
+    if (!videoId) return;
 
-    return currentTime;
-  }
+    saveMarkers(videoId, markers);
+  }, [markers, videoId]);
 
-  function jumpTo(time) {
-    if (
-      playerRef.current &&
-      typeof playerRef.current.seekTo === "function"
-    ) {
-      playerRef.current.seekTo(time, true);
-      playerRef.current.playVideo();
-    }
-  }
+  const sortedMarkers = useMemo(
+    () =>
+      [...markers].sort(
+        (a, b) => Number(a.time) - Number(b.time)
+      ),
+    [markers]
+  );
 
-  function addMarker() {
-    const text = noteText.trim();
-
-    if (!text) return;
-
-    const time = getCurrentVideoTime();
-
-    const newMarker = {
-      id: Date.now(),
-      time,
-      type: markerType,
-      text,
+  function addMarker(type = activeType) {
+    const marker = {
+      id: `${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2, 8)}`,
+      type,
+      time: currentTime,
+      note: noteText.trim(),
+      createdAt: Date.now(),
     };
 
-    setMarkers((previous) =>
-      [...previous, newMarker].sort((a, b) => a.time - b.time)
-    );
+    setMarkers((previous) => [...previous, marker]);
 
     setNoteText("");
   }
 
-  function addQuickMarker(type) {
-    const time = getCurrentVideoTime();
-
-    const labels = {
-      important: "Important point",
-      doubt: "Doubt",
-      pyq: "PYQ / Question",
-    };
-
-    const newMarker = {
-      id: Date.now(),
-      time,
-      type,
-      text: labels[type],
-    };
-
+  function deleteMarker(markerId) {
     setMarkers((previous) =>
-      [...previous, newMarker].sort((a, b) => a.time - b.time)
+      previous.filter((marker) => marker.id !== markerId)
     );
   }
 
-  function deleteMarker(id) {
-    setMarkers((previous) =>
-      previous.filter((marker) => marker.id !== id)
-    );
+  function jumpToMarker(time) {
+    /*
+     * This becomes connected to the YouTube IFrame Player API
+     * when the advanced player controller is added.
+     */
+    setCurrentTime(time);
   }
 
   if (!videoId) {
     return (
       <Layout>
-        <div style={styles.error}>
-          <h2>Video not found</h2>
-          <p>No YouTube video ID was provided.</p>
+        <div className="player-error">
+          <div className="player-error-icon">🎬</div>
+          <h1>Video not found</h1>
+          <p>
+            Select a lecture from JEE-Tube to start learning.
+          </p>
+
+          <button
+            className="player-primary-button"
+            onClick={() => navigate("/")}
+          >
+            Go to Home
+          </button>
         </div>
       </Layout>
     );
   }
 
+  const embedUrl =
+    `https://www.youtube-nocookie.com/embed/${videoId}` +
+    `?rel=0&modestbranding=1`;
+
   return (
     <Layout>
-      <div style={styles.page}>
-        {/* Video */}
-        <section style={styles.playerSection}>
-          <div style={styles.videoWrapper}>
-            <div
-              id="jee-tube-youtube-player"
-              style={{
-                width: "100%",
-                height: "100%",
-              }}
-            />
-          </div>
+      <main className="player-page">
+        {/* Top navigation */}
+        <div className="player-topbar">
+          <button
+            className="player-back-button"
+            onClick={() => navigate(-1)}
+            aria-label="Go back"
+          >
+            ←
+          </button>
 
-          <div style={styles.playerInfo}>
+          <div className="player-brand">
+            <span className="player-brand-mark">J</span>
+
             <div>
-              <h1 style={styles.title}>JEE Tube Study Player</h1>
-
-              <p style={styles.subtitle}>
-                {playerReady
-                  ? `${formatTime(currentTime)} / ${formatTime(duration)}`
-                  : "Loading video..."}
-              </p>
-            </div>
-
-            <div style={styles.badge}>JEE TUBE</div>
-          </div>
-        </section>
-
-        {/* Study tools */}
-        <section style={styles.tools}>
-          <div style={styles.toolsHeader}>
-            <div>
-              <h2 style={styles.sectionTitle}>Study Tools</h2>
-
-              <p style={styles.sectionSubtitle}>
-                Add notes and markers while watching.
-              </p>
-            </div>
-
-            <div style={styles.currentTime}>
-              {formatTime(currentTime)}
+              <strong>JEE-Tube</strong>
+              <span>Learning Player</span>
             </div>
           </div>
 
-          {/* Quick markers */}
-          <div style={styles.quickButtons}>
+          <div className="player-top-actions">
             <button
-              style={styles.quickButton}
-              onClick={() => addQuickMarker("important")}
+              className="icon-action"
+              onClick={() => setShowNotes((value) => !value)}
+              title="Toggle notes"
             >
-              ⭐ Important
-            </button>
-
-            <button
-              style={styles.quickButton}
-              onClick={() => addQuickMarker("doubt")}
-            >
-              ❓ Doubt
-            </button>
-
-            <button
-              style={styles.quickButton}
-              onClick={() => addQuickMarker("pyq")}
-            >
-              🎯 PYQ
+              📝
             </button>
           </div>
+        </div>
 
-          {/* Note composer */}
-          <div style={styles.composer}>
-            <select
-              value={markerType}
-              onChange={(event) => setMarkerType(event.target.value)}
-              style={styles.select}
-            >
-              <option value="note">📝 Note</option>
-              <option value="important">⭐ Important</option>
-              <option value="doubt">❓ Doubt</option>
-              <option value="pyq">🎯 PYQ</option>
-            </select>
+        <div
+          className={`player-layout ${
+            showNotes ? "with-notes" : "full-width"
+          }`}
+        >
+          {/* Main player column */}
+          <section className="player-main">
+            <div className="cinema-player">
+              <div className="video-frame">
+                <iframe
+                  src={embedUrl}
+                  title="JEE-Tube Lecture Player"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                />
+              </div>
 
-            <input
-              value={noteText}
-              onChange={(event) => setNoteText(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  addMarker();
-                }
-              }}
-              placeholder="Write a note at the current timestamp..."
-              style={styles.input}
-            />
-
-            <button
-              onClick={addMarker}
-              style={styles.addButton}
-              disabled={!noteText.trim()}
-            >
-              Add at {formatTime(currentTime)}
-            </button>
-          </div>
-        </section>
-
-        {/* Timeline */}
-        <section style={styles.timelineSection}>
-          <div style={styles.timelineHeader}>
-            <div>
-              <h2 style={styles.sectionTitle}>My Timeline</h2>
-
-              <p style={styles.sectionSubtitle}>
-                {markers.length} saved{" "}
-                {markers.length === 1 ? "marker" : "markers"}
-              </p>
+              <div className="player-overlay-brand">
+                JEE-TUBE
+              </div>
             </div>
-          </div>
 
-          {markers.length === 0 ? (
-            <div style={styles.empty}>
-              <div style={styles.emptyIcon}>📌</div>
-
-              <h3>No markers yet</h3>
-
-              <p>
-                Add an important point, doubt, PYQ, or note while watching.
-              </p>
-            </div>
-          ) : (
-            <div style={styles.markerList}>
-              {markers.map((marker) => (
+            {/* Custom study timeline */}
+            <div className="study-timeline">
+              <div className="timeline-track">
                 <div
-                  key={marker.id}
-                  style={{
-                    ...styles.marker,
-                    borderLeft: `4px solid ${getMarkerColor(marker.type)}`,
+                  className="timeline-progress"
+                  style={{ width: "0%" }}
+                />
+
+                {sortedMarkers.map((marker) => (
+                  <button
+                    key={marker.id}
+                    className={`timeline-marker marker-${marker.type}`}
+                    style={{
+                      left: `${Math.min(
+                        100,
+                        Math.max(0, marker.time / 3600 * 100)
+                      )}%`,
+                    }}
+                    title={`${MARKER_TYPES[marker.type]?.label || "Marker"} — ${formatTime(
+                      marker.time
+                    )}`}
+                    onClick={() => jumpToMarker(marker.time)}
+                  >
+                    {MARKER_TYPES[marker.type]?.icon || "•"}
+                  </button>
+                ))}
+              </div>
+
+              <div className="timeline-meta">
+                <span>{formatTime(currentTime)}</span>
+                <span>Lecture timeline</span>
+              </div>
+            </div>
+
+            {/* Study controls */}
+            <div className="study-toolbar">
+              <div className="toolbar-group">
+                <button
+                  className={
+                    activeType === "bookmark"
+                      ? "study-button active"
+                      : "study-button"
+                  }
+                  onClick={() => {
+                    setActiveType("bookmark");
+                    addMarker("bookmark");
                   }}
                 >
-                  <button
-                    onClick={() => jumpTo(marker.time)}
-                    style={styles.timeButton}
-                  >
-                    {formatTime(marker.time)}
-                  </button>
+                  🔖
+                  <span>Bookmark</span>
+                </button>
 
-                  <div style={styles.markerContent}>
-                    <div style={styles.markerType}>
-                      {getMarkerIcon(marker.type)}{" "}
-                      {getMarkerName(marker.type)}
-                    </div>
+                <button
+                  className={
+                    activeType === "note"
+                      ? "study-button active"
+                      : "study-button"
+                  }
+                  onClick={() => {
+                    setActiveType("note");
+                    addMarker("note");
+                  }}
+                >
+                  📝
+                  <span>Note</span>
+                </button>
 
-                    <div style={styles.markerText}>
-                      {marker.text}
-                    </div>
+                <button
+                  className={
+                    activeType === "doubt"
+                      ? "study-button active"
+                      : "study-button"
+                  }
+                  onClick={() => {
+                    setActiveType("doubt");
+                    addMarker("doubt");
+                  }}
+                >
+                  ❓
+                  <span>Doubt</span>
+                </button>
+
+                <button
+                  className={
+                    activeType === "pyq"
+                      ? "study-button active"
+                      : "study-button"
+                  }
+                  onClick={() => {
+                    setActiveType("pyq");
+                    addMarker("pyq");
+                  }}
+                >
+                  🎯
+                  <span>PYQ</span>
+                </button>
+              </div>
+
+              <button
+                className="save-note-button"
+                onClick={() => addMarker("note")}
+              >
+                + Save timestamp
+              </button>
+            </div>
+
+            {/* Lecture information */}
+            <article className="lecture-info">
+              <div className="lecture-heading">
+                <div>
+                  <div className="lecture-category">
+                    PHYSICS • JEE PREPARATION
                   </div>
 
-                  <button
-                    onClick={() => deleteMarker(marker.id)}
-                    style={styles.deleteButton}
-                    title="Delete marker"
+                  <h1>
+                    JEE-Tube Lecture
+                  </h1>
+
+                  <p>
+                    Continue your preparation with your
+                    personal lecture timeline.
+                  </p>
+                </div>
+
+                <div className="lecture-status">
+                  <span className="status-dot" />
+                  {isPlaying ? "Playing" : "Ready"}
+                </div>
+              </div>
+
+              <div className="lecture-stats">
+                <div>
+                  <span>Subject</span>
+                  <strong>Physics</strong>
+                </div>
+
+                <div>
+                  <span>Markers</span>
+                  <strong>{markers.length}</strong>
+                </div>
+
+                <div>
+                  <span>Saved locally</span>
+                  <strong>✓</strong>
+                </div>
+              </div>
+            </article>
+          </section>
+
+          {/* Notes / timeline panel */}
+          {showNotes && (
+            <aside className="notes-panel">
+              <div className="notes-header">
+                <div>
+                  <span className="notes-eyebrow">
+                    STUDY TOOLS
+                  </span>
+
+                  <h2>Lecture Notes</h2>
+                </div>
+
+                <span className="notes-count">
+                  {markers.length}
+                </span>
+              </div>
+
+              {/* Add note */}
+              <div className="note-composer">
+                <div className="composer-time">
+                  {formatTime(currentTime)}
+                </div>
+
+                <textarea
+                  value={noteText}
+                  onChange={(event) =>
+                    setNoteText(event.target.value)
+                  }
+                  placeholder="Write something about this moment..."
+                  rows={4}
+                />
+
+                <div className="composer-footer">
+                  <select
+                    value={activeType}
+                    onChange={(event) =>
+                      setActiveType(event.target.value)
+                    }
                   >
-                    ×
+                    {Object.entries(MARKER_TYPES).map(
+                      ([key, value]) => (
+                        <option key={key} value={key}>
+                          {value.icon} {value.label}
+                        </option>
+                      )
+                    )}
+                  </select>
+
+                  <button
+                    onClick={() => addMarker(activeType)}
+                    disabled={!noteText.trim()}
+                  >
+                    Save
                   </button>
                 </div>
-              ))}
-            </div>
+              </div>
+
+              {/* Marker list */}
+              <div className="marker-list">
+                {sortedMarkers.length === 0 ? (
+                  <div className="empty-notes">
+                    <div>📝</div>
+
+                    <strong>
+                      Your lecture timeline is empty
+                    </strong>
+
+                    <p>
+                      Add bookmarks, doubts, PYQs or notes
+                      while studying.
+                    </p>
+                  </div>
+                ) : (
+                  sortedMarkers.map((marker) => {
+                    const type =
+                      MARKER_TYPES[marker.type] ||
+                      MARKER_TYPES.bookmark;
+
+                    return (
+                      <article
+                        className={`marker-card marker-card-${marker.type}`}
+                        key={marker.id}
+                      >
+                        <button
+                          className="marker-time"
+                          onClick={() =>
+                            jumpToMarker(marker.time)
+                          }
+                        >
+                          {type.icon}{" "}
+                          {formatTime(marker.time)}
+                        </button>
+
+                        <div className="marker-content">
+                          <div className="marker-label">
+                            {type.label}
+                          </div>
+
+                          {marker.note && (
+                            <p>{marker.note}</p>
+                          )}
+                        </div>
+
+                        <button
+                          className="delete-marker"
+                          onClick={() =>
+                            deleteMarker(marker.id)
+                          }
+                          aria-label="Delete marker"
+                        >
+                          ×
+                        </button>
+                      </article>
+                    );
+                  })
+                )}
+              </div>
+            </aside>
           )}
+        </div>
+
+        {/* Related section */}
+        <section className="player-related">
+          <div className="related-heading">
+            <div>
+              <span>KEEP LEARNING</span>
+              <h2>More from JEE-Tube</h2>
+            </div>
+
+            <button onClick={() => navigate("/physics")}>
+              Explore Physics →
+            </button>
+          </div>
+
+          <div className="related-placeholder">
+            <div>▶</div>
+
+            <div>
+              <strong>Related lectures</strong>
+              <p>
+                Your recommended lectures will appear here.
+              </p>
+            </div>
+          </div>
         </section>
-      </div>
+      </main>
     </Layout>
   );
 }
-
-function getMarkerIcon(type) {
-  const icons = {
-    note: "📝",
-    important: "⭐",
-    doubt: "❓",
-    pyq: "🎯",
-  };
-
-  return icons[type] || "📝";
-}
-
-function getMarkerName(type) {
-  const names = {
-    note: "Note",
-    important: "Important",
-    doubt: "Doubt",
-    pyq: "PYQ",
-  };
-
-  return names[type] || "Note";
-}
-
-function getMarkerColor(type) {
-  const colors = {
-    note: "#4f8cff",
-    important: "#ffc107",
-    doubt: "#ff5c5c",
-    pyq: "#9b6cff",
-  };
-
-  return colors[type] || "#4f8cff";
-}
-
-const styles = {
-  page: {
-    width: "100%",
-    maxWidth: "1400px",
-    margin: "0 auto",
-    paddingBottom: "60px",
-  },
-
-  playerSection: {
-    width: "100%",
-  },
-
-  videoWrapper: {
-    width: "100%",
-    height: PLAYER_HEIGHT,
-    minHeight: "240px",
-    maxHeight: "680px",
-    background: "#000",
-    borderRadius: "16px",
-    overflow: "hidden",
-    boxShadow: "0 10px 40px rgba(0,0,0,0.45)",
-  },
-
-  playerInfo: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: "20px",
-    padding: "18px 4px 10px",
-  },
-
-  title: {
-    margin: 0,
-    fontSize: "24px",
-    fontWeight: 700,
-  },
-
-  subtitle: {
-    margin: "6px 0 0",
-    color: "#999",
-    fontSize: "14px",
-  },
-
-  badge: {
-    padding: "7px 12px",
-    borderRadius: "8px",
-    background: "#e50914",
-    color: "#fff",
-    fontSize: "11px",
-    fontWeight: 800,
-    letterSpacing: "1px",
-  },
-
-  tools: {
-    marginTop: "20px",
-    padding: "20px",
-    background: "#151515",
-    border: "1px solid #292929",
-    borderRadius: "16px",
-  },
-
-  toolsHeader: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: "15px",
-  },
-
-  sectionTitle: {
-    margin: 0,
-    fontSize: "20px",
-  },
-
-  sectionSubtitle: {
-    margin: "5px 0 0",
-    color: "#888",
-    fontSize: "13px",
-  },
-
-  currentTime: {
-    padding: "8px 12px",
-    borderRadius: "8px",
-    background: "#222",
-    color: "#ddd",
-    fontFamily: "monospace",
-    fontSize: "13px",
-  },
-
-  quickButtons: {
-    display: "flex",
-    flexWrap: "wrap",
-    gap: "10px",
-    marginTop: "18px",
-  },
-
-  quickButton: {
-    border: "1px solid #333",
-    background: "#202020",
-    color: "#fff",
-    padding: "9px 13px",
-    borderRadius: "9px",
-    cursor: "pointer",
-  },
-
-  composer: {
-    display: "flex",
-    gap: "10px",
-    marginTop: "14px",
-  },
-
-  select: {
-    background: "#202020",
-    color: "#fff",
-    border: "1px solid #333",
-    borderRadius: "9px",
-    padding: "0 10px",
-  },
-
-  input: {
-    flex: 1,
-    minWidth: 0,
-    background: "#202020",
-    color: "#fff",
-    border: "1px solid #333",
-    borderRadius: "9px",
-    padding: "12px",
-    outline: "none",
-  },
-
-  addButton: {
-    background: "#e50914",
-    color: "#fff",
-    border: "none",
-    borderRadius: "9px",
-    padding: "0 16px",
-    fontWeight: 700,
-    cursor: "pointer",
-  },
-
-  timelineSection: {
-    marginTop: "25px",
-  },
-
-  timelineHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: "14px",
-  },
-
-  empty: {
-    padding: "45px 20px",
-    textAlign: "center",
-    background: "#151515",
-    border: "1px solid #292929",
-    borderRadius: "16px",
-    color: "#888",
-  },
-
-  emptyIcon: {
-    fontSize: "35px",
-    marginBottom: "10px",
-  },
-
-  markerList: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "10px",
-  },
-
-  marker: {
-    display: "flex",
-    alignItems: "center",
-    gap: "14px",
-    padding: "14px",
-    background: "#151515",
-    borderRadius: "10px",
-  },
-
-  timeButton: {
-    flexShrink: 0,
-    border: "none",
-    background: "#252525",
-    color: "#fff",
-    borderRadius: "7px",
-    padding: "7px 10px",
-    fontFamily: "monospace",
-    cursor: "pointer",
-  },
-
-  markerContent: {
-    flex: 1,
-    minWidth: 0,
-  },
-
-  markerType: {
-    color: "#aaa",
-    fontSize: "12px",
-    marginBottom: "4px",
-  },
-
-  markerText: {
-    color: "#fff",
-    fontSize: "14px",
-    wordBreak: "break-word",
-  },
-
-  deleteButton: {
-    flexShrink: 0,
-    width: "30px",
-    height: "30px",
-    border: "none",
-    background: "transparent",
-    color: "#777",
-    fontSize: "22px",
-    cursor: "pointer",
-  },
-
-  error: {
-    padding: "50px",
-    textAlign: "center",
-  },
-};
