@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Layout from "../components/layout/Layout";
-import { supabase } from "../lib/supabase";
+import "../styles/player.css";
 
 const STORAGE_KEY = "jee-tube-study-markers";
 
@@ -13,17 +13,41 @@ const ACTIONS = [
   { type: "concept", icon: "🧠", label: "Concept" },
 ];
 
-const ICONS = {
-  bookmark: "🔖",
-  important: "⭐",
-  doubt: "❓",
-  formula: "🧮",
-  concept: "🧠",
-  note: "📝",
+/*
+ * Sequence & Series chapter data.
+ * You already extracted these timestamps from YouTube.
+ */
+const VIDEO_CHAPTERS = {
+  zOdUhsMydtM: [
+    { id: "chapter-1", time: 0, title: "Introduction" },
+    { id: "chapter-2", time: 96, title: "Topics to be covered" },
+    { id: "chapter-3", time: 285, title: "Arithmetic progression" },
+    { id: "chapter-4", time: 544, title: "Properties of AP" },
+    { id: "chapter-5", time: 6748, title: "Common term problems" },
+    { id: "chapter-6", time: 8204, title: "Geometric progression" },
+    { id: "chapter-7", time: 8334, title: "Properties of GP" },
+    { id: "chapter-8", time: 8675, title: "Important format for GP" },
+    { id: "chapter-9", time: 10151, title: "Special type GP problems" },
+    { id: "chapter-10", time: 12208, title: "Harmonic progression" },
+    { id: "chapter-11", time: 14542, title: "Means" },
+    { id: "chapter-12", time: 14834, title: "Inserting Means" },
+    { id: "chapter-13", time: 16770, title: "Important Concepts" },
+    { id: "chapter-14", time: 17367, title: "Arithmetic geometric progression" },
+    { id: "chapter-15", time: 19184, title: "Properties of Sigma" },
+    { id: "chapter-16", time: 19557, title: "Formulas of Sigma" },
+    { id: "chapter-17", time: 20232, title: "Miscellaneous sequences" },
+    { id: "chapter-18", time: 21498, title: "Shortcut method for Tn" },
+    { id: "chapter-19", time: 22085, title: "Telescopic method of difference" },
+    { id: "chapter-20", time: 25390, title: "AM-GM-HM Inequality" },
+    { id: "chapter-21", time: 26457, title: "Exponential Series" },
+    { id: "chapter-22", time: 28412, title: "Logarithmic Series" },
+    { id: "chapter-23", time: 29195, title: "Thankyou bachhon" },
+  ],
 };
 
 function formatTime(seconds) {
   const s = Math.floor(seconds || 0);
+
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
   const sec = s % 60;
@@ -38,53 +62,20 @@ function formatTime(seconds) {
   return `${m}:${String(sec).padStart(2, "0")}`;
 }
 
-/*
-  Converts timestamps from a video description into chapters.
+function getActiveChapter(chapters, currentTime) {
+  if (!chapters.length) return null;
 
-  Examples supported:
+  let active = chapters[0];
 
-  0:00 Introduction
-  12:35 Arithmetic Progression
-  1:04:20 Geometric Progression
-*/
-function extractChapters(description = "") {
-  const lines = description.split(/\r?\n/);
-
-  const chapters = [];
-
-  const timestampRegex =
-    /(?:^|\s)(\d{1,2}:\d{2}(?::\d{2})?)\s+(.+?)(?=\s*$)/;
-
-  for (const line of lines) {
-    const match = line.trim().match(timestampRegex);
-
-    if (!match) continue;
-
-    const timeText = match[1];
-    const title = match[2].trim();
-
-    const parts = timeText.split(":").map(Number);
-
-    let seconds = 0;
-
-    if (parts.length === 2) {
-      seconds = parts[0] * 60 + parts[1];
-    } else if (parts.length === 3) {
-      seconds =
-        parts[0] * 3600 +
-        parts[1] * 60 +
-        parts[2];
+  for (const chapter of chapters) {
+    if (currentTime >= chapter.time) {
+      active = chapter;
+    } else {
+      break;
     }
-
-    if (!title) continue;
-
-    chapters.push({
-      time: seconds,
-      title,
-    });
   }
 
-  return chapters.sort((a, b) => a.time - b.time);
+  return active;
 }
 
 export default function Player() {
@@ -100,9 +91,11 @@ export default function Player() {
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteText, setNoteText] = useState("");
 
-  const [videoInfo, setVideoInfo] = useState(null);
-  const [chapters, setChapters] = useState([]);
-  const [playerReady, setPlayerReady] = useState(false);
+  const [chaptersOpen, setChaptersOpen] = useState(false);
+
+  const chapters = VIDEO_CHAPTERS[videoId] || [];
+
+  const activeChapter = getActiveChapter(chapters, currentTime);
 
   // --------------------------------------------------
   // Load saved markers
@@ -115,9 +108,7 @@ export default function Player() {
       );
 
       setMarkers(
-        saved.filter(
-          (marker) => marker.videoId === videoId
-        )
+        saved.filter((marker) => marker.videoId === videoId)
       );
     } catch {
       setMarkers([]);
@@ -146,55 +137,12 @@ export default function Player() {
         ])
       );
     } catch {
-      // Ignore localStorage errors
+      // Ignore storage errors
     }
   }, [markers, videoId]);
 
   // --------------------------------------------------
-  // Load video information + chapters from Supabase
-  // --------------------------------------------------
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadVideoInfo() {
-      const { data, error } = await supabase
-        .from("videos")
-        .select(
-          "youtube_id,title,description,thumbnail,teacher,subject,chapter,series_name"
-        )
-        .eq("youtube_id", videoId)
-        .maybeSingle();
-
-      if (error) {
-        console.error(
-          "Player video lookup failed:",
-          error
-        );
-        return;
-      }
-
-      if (cancelled) return;
-
-      if (data) {
-        setVideoInfo(data);
-
-        const extracted =
-          extractChapters(data.description || "");
-
-        setChapters(extracted);
-      }
-    }
-
-    loadVideoInfo();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [videoId]);
-
-  // --------------------------------------------------
-  // YouTube IFrame Player
+  // YouTube player
   // --------------------------------------------------
 
   useEffect(() => {
@@ -240,38 +188,17 @@ export default function Player() {
 
           events: {
             onReady: () => {
-              if (cancelled) return;
-
-              setPlayerReady(true);
               startTimeTracking();
-            },
-
-            onStateChange: () => {
-              try {
-                if (
-                  playerRef.current?.getCurrentTime
-                ) {
-                  setCurrentTime(
-                    playerRef.current.getCurrentTime()
-                  );
-                }
-              } catch {
-                // Ignore
-              }
             },
           },
         }
       );
     }
 
-    if (
-      window.YT &&
-      window.YT.Player
-    ) {
+    if (window.YT && window.YT.Player) {
       createPlayer();
     } else {
-      window.onYouTubeIframeAPIReady =
-        createPlayer;
+      window.onYouTubeIframeAPIReady = createPlayer;
 
       if (
         !document.getElementById(
@@ -281,9 +208,7 @@ export default function Player() {
         const script =
           document.createElement("script");
 
-        script.id =
-          "youtube-iframe-api";
-
+        script.id = "youtube-iframe-api";
         script.src =
           "https://www.youtube.com/iframe_api";
 
@@ -303,7 +228,6 @@ export default function Player() {
       }
 
       playerRef.current = null;
-      setPlayerReady(false);
     };
   }, [videoId]);
 
@@ -313,9 +237,7 @@ export default function Player() {
 
   function getCurrentTimestamp() {
     try {
-      if (
-        playerRef.current?.getCurrentTime
-      ) {
+      if (playerRef.current?.getCurrentTime) {
         const time =
           playerRef.current.getCurrentTime();
 
@@ -331,7 +253,7 @@ export default function Player() {
   }
 
   // --------------------------------------------------
-  // Add study marker
+  // Add marker
   // --------------------------------------------------
 
   function addMarker(type) {
@@ -390,178 +312,217 @@ export default function Player() {
   }
 
   // --------------------------------------------------
-  // Jump to timestamp
+  // Jump to marker
   // --------------------------------------------------
 
-  function jumpToTime(time) {
+  function jumpToMarker(marker) {
     try {
-      if (
-        playerRef.current?.seekTo
-      ) {
-        playerRef.current.seekTo(
-          time,
-          true
-        );
+      playerRef.current?.seekTo(
+        marker.time,
+        true
+      );
 
-        playerRef.current.playVideo();
-
-        setCurrentTime(time);
-      }
+      playerRef.current?.playVideo();
     } catch {
       // Ignore
     }
   }
 
-  function jumpToMarker(marker) {
-    jumpToTime(marker.time);
+  // --------------------------------------------------
+  // Jump to chapter
+  // --------------------------------------------------
+
+  function jumpToChapter(chapter) {
+    try {
+      playerRef.current?.seekTo(
+        chapter.time,
+        true
+      );
+
+      playerRef.current?.playVideo();
+
+      setCurrentTime(chapter.time);
+      setChaptersOpen(false);
+    } catch {
+      // Ignore
+    }
   }
+
+  // --------------------------------------------------
+  // Delete marker
+  // --------------------------------------------------
 
   function deleteMarker(id) {
     setMarkers((previous) =>
       previous.filter(
-        (marker) =>
-          marker.id !== id
+        (marker) => marker.id !== id
       )
     );
   }
 
-  // --------------------------------------------------
-  // Render
-  // --------------------------------------------------
+  const iconFor = {
+    bookmark: "🔖",
+    important: "⭐",
+    doubt: "❓",
+    formula: "🧮",
+    concept: "🧠",
+    note: "📝",
+  };
 
   return (
     <Layout>
-      <div style={styles.page}>
+      <div className="jt-player-page">
 
+        {/* Back */}
         <button
           onClick={() => navigate(-1)}
-          style={styles.back}
+          className="jt-player-back"
         >
           ← Back
         </button>
 
-        {videoInfo?.title && (
-          <div style={styles.videoTitle}>
-            {videoInfo.title}
-          </div>
-        )}
+        {/* Player */}
+        <div className="jt-player-wrapper">
+          <div id="jee-tube-player" />
+        </div>
 
-        <div style={styles.playerArea}>
+        {/* Current position */}
+        <div className="jt-player-time">
+          Current position:{" "}
+          <strong>
+            {formatTime(currentTime)}
+          </strong>
+        </div>
 
-          <div style={styles.playerWrapper}>
-            <div
-              id="jee-tube-player"
-              style={styles.youtubePlayer}
-            />
-          </div>
+        {/* Toolbar */}
+        <div className="jt-player-toolbar">
 
+          {/* CHAPTER DROPDOWN */}
           {chapters.length > 0 && (
-            <aside style={styles.chapterPanel}>
+            <div className="jt-chapters">
 
-              <div style={styles.chapterHeader}>
-                <strong>Chapters</strong>
-                <span>
-                  {chapters.length}
+              <button
+                className={`jt-chapters-button ${
+                  chaptersOpen
+                    ? "open"
+                    : ""
+                }`}
+                onClick={() =>
+                  setChaptersOpen(
+                    (previous) =>
+                      !previous
+                  )
+                }
+              >
+                <span>📑</span>
+
+                <span className="jt-current-chapter">
+                  {activeChapter
+                    ? activeChapter.title
+                    : "Chapters"}
                 </span>
-              </div>
 
-              <div style={styles.chapterList}>
-                {chapters.map(
-                  (chapter, index) => {
-                    const nextChapter =
-                      chapters[index + 1];
+                <span className="jt-chapters-arrow">
+                  {chaptersOpen
+                    ? "▲"
+                    : "▼"}
+                </span>
+              </button>
 
-                    const active =
-                      currentTime >=
-                        chapter.time &&
-                      (!nextChapter ||
-                        currentTime <
-                          nextChapter.time);
+              {chaptersOpen && (
+                <div className="jt-chapters-dropdown">
 
-                    return (
-                      <button
-                        key={`${chapter.time}-${index}`}
-                        onClick={() =>
-                          jumpToTime(
-                            chapter.time
-                          )
-                        }
-                        style={{
-                          ...styles.chapter,
-                          ...(active
-                            ? styles.chapterActive
-                            : {}),
-                        }}
-                      >
-                        <span
-                          style={
-                            styles.chapterTime
-                          }
-                        >
-                          {formatTime(
-                            chapter.time
-                          )}
-                        </span>
+                  <div className="jt-chapters-header">
+                    <strong>
+                      Chapters
+                    </strong>
 
-                        <span
-                          style={
-                            styles.chapterTitle
-                          }
-                        >
-                          {chapter.title}
-                        </span>
-                      </button>
-                    );
-                  }
-                )}
-              </div>
+                    <span>
+                      {chapters.length}
+                    </span>
+                  </div>
 
-            </aside>
+                  <div className="jt-chapters-list">
+                    {chapters.map(
+                      (chapter) => {
+                        const isActive =
+                          activeChapter?.id ===
+                          chapter.id;
+
+                        return (
+                          <button
+                            key={chapter.id}
+                            className={`jt-chapter-item ${
+                              isActive
+                                ? "active"
+                                : ""
+                            }`}
+                            onClick={() =>
+                              jumpToChapter(
+                                chapter
+                              )
+                            }
+                          >
+                            <span className="jt-chapter-play">
+                              {isActive
+                                ? "▶"
+                                : ""}
+                            </span>
+
+                            <span className="jt-chapter-title">
+                              {
+                                chapter.title
+                              }
+                            </span>
+
+                            <span className="jt-chapter-time">
+                              {formatTime(
+                                chapter.time
+                              )}
+                            </span>
+                          </button>
+                        );
+                      }
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           )}
 
-        </div>
-
-        <div style={styles.timeBar}>
-          {playerReady
-            ? `Current position: ${formatTime(
-                currentTime
-              )}`
-            : "Loading player..."}
-        </div>
-
-        {/* STUDY TOOLBAR */}
-
-        <div style={styles.toolbar}>
+          {/* Study actions */}
           {ACTIONS.map((action) => (
             <button
               key={action.type}
               onClick={() =>
                 addMarker(action.type)
               }
-              style={styles.action}
+              className="jt-study-action"
               title={`Save ${action.label} at current position`}
             >
-              <span>{action.icon}</span>
+              <span>
+                {action.icon}
+              </span>
+
               {action.label}
             </button>
           ))}
 
+          {/* Note */}
           <button
             onClick={openNote}
-            style={styles.action}
+            className="jt-study-action"
           >
             <span>📝</span>
             Note
           </button>
         </div>
 
-        {/* NOTE BOX */}
-
+        {/* Note box */}
         {noteOpen && (
-          <div style={styles.noteBox}>
-            <div
-              style={styles.noteHeader}
-            >
+          <div className="jt-note-box">
+
+            <div className="jt-note-header">
               <strong>
                 Note at{" "}
                 {formatTime(
@@ -573,7 +534,7 @@ export default function Player() {
                 onClick={() =>
                   setNoteOpen(false)
                 }
-                style={styles.close}
+                className="jt-note-close"
               >
                 ×
               </button>
@@ -588,50 +549,47 @@ export default function Player() {
                 )
               }
               placeholder="Write your note..."
-              style={styles.textarea}
+              className="jt-note-textarea"
             />
 
-            <div
-              style={
-                styles.noteActions
-              }
-            >
+            <div className="jt-note-actions">
+
               <button
                 onClick={() =>
                   setNoteOpen(false)
                 }
-                style={styles.cancel}
+                className="jt-note-cancel"
               >
                 Cancel
               </button>
 
               <button
                 onClick={saveNote}
-                style={styles.save}
+                className="jt-note-save"
               >
                 Save Note
               </button>
+
             </div>
           </div>
         )}
 
-        {/* STUDY POINTS */}
+        {/* Study points */}
+        <section className="jt-markers-section">
 
-        <section
-          style={styles.markersSection}
-        >
-          <h2 style={styles.heading}>
+          <h2>
             My Study Points
           </h2>
 
           {markers.length === 0 ? (
-            <div style={styles.empty}>
-              Pause the lecture and save
-              a bookmark, important point,
+            <div className="jt-markers-empty">
+              Pause the lecture and save a
+              bookmark, important point,
               doubt, formula or concept.
             </div>
           ) : (
-            <div style={styles.markers}>
+            <div className="jt-markers">
+
               {[...markers]
                 .sort(
                   (a, b) =>
@@ -640,25 +598,20 @@ export default function Player() {
                 .map((marker) => (
                   <div
                     key={marker.id}
-                    style={styles.marker}
+                    className="jt-marker"
                   >
+
                     <button
                       onClick={() =>
                         jumpToMarker(
                           marker
                         )
                       }
-                      style={
-                        styles.markerMain
-                      }
+                      className="jt-marker-main"
                     >
-                      <span
-                        style={
-                          styles.markerIcon
-                        }
-                      >
+                      <span className="jt-marker-icon">
                         {
-                          ICONS[
+                          iconFor[
                             marker.type
                           ]
                         }
@@ -671,21 +624,15 @@ export default function Player() {
                           )}
                         </strong>
 
-                        <span
-                          style={
-                            styles.markerType
-                          }
-                        >
+                        <span className="jt-marker-type">
                           {marker.type}
                         </span>
 
                         {marker.text && (
-                          <span
-                            style={
-                              styles.markerText
+                          <span className="jt-marker-text">
+                            {
+                              marker.text
                             }
-                          >
-                            {marker.text}
                           </span>
                         )}
                       </span>
@@ -697,13 +644,12 @@ export default function Player() {
                           marker.id
                         )
                       }
-                      style={
-                        styles.delete
-                      }
+                      className="jt-marker-delete"
                       title="Delete"
                     >
                       ×
                     </button>
+
                   </div>
                 ))}
             </div>
@@ -714,262 +660,3 @@ export default function Player() {
     </Layout>
   );
 }
-
-const styles = {
-  page: {
-    width: "100%",
-    maxWidth: "1400px",
-    margin: "0 auto",
-    paddingBottom: "60px",
-  },
-
-  back: {
-    background: "transparent",
-    border: "none",
-    color: "#aaa",
-    fontSize: "15px",
-    cursor: "pointer",
-    marginBottom: "12px",
-  },
-
-  videoTitle: {
-    color: "#fff",
-    fontSize: "20px",
-    fontWeight: 700,
-    marginBottom: "15px",
-  },
-
-  playerArea: {
-    display: "grid",
-    gridTemplateColumns:
-      "minmax(0, 1fr) 300px",
-    gap: "15px",
-    alignItems: "start",
-  },
-
-  playerWrapper: {
-    width: "100%",
-    aspectRatio: "16 / 9",
-    background: "#000",
-    borderRadius: "12px",
-    overflow: "hidden",
-    position: "relative",
-  },
-
-  youtubePlayer: {
-    width: "100%",
-    height: "100%",
-  },
-
-  chapterPanel: {
-    background: "#151515",
-    border: "1px solid #292929",
-    borderRadius: "12px",
-    overflow: "hidden",
-    maxHeight: "calc(100vh - 160px)",
-    minHeight: "200px",
-  },
-
-  chapterHeader: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: "14px 16px",
-    borderBottom: "1px solid #292929",
-    color: "#fff",
-    fontSize: "15px",
-  },
-
-  chapterList: {
-    overflowY: "auto",
-    maxHeight: "calc(100vh - 220px)",
-  },
-
-  chapter: {
-    width: "100%",
-    display: "flex",
-    alignItems: "flex-start",
-    gap: "10px",
-    textAlign: "left",
-    padding: "11px 14px",
-    border: "none",
-    borderBottom: "1px solid #222",
-    background: "transparent",
-    color: "#aaa",
-    cursor: "pointer",
-  },
-
-  chapterActive: {
-    background: "#241010",
-    color: "#fff",
-    borderLeft: "3px solid #e50914",
-  },
-
-  chapterTime: {
-    minWidth: "48px",
-    color: "#e50914",
-    fontSize: "12px",
-    fontWeight: 700,
-  },
-
-  chapterTitle: {
-    fontSize: "13px",
-    lineHeight: 1.35,
-  },
-
-  timeBar: {
-    padding: "10px 2px",
-    color: "#888",
-    fontSize: "13px",
-  },
-
-  toolbar: {
-    display: "flex",
-    flexWrap: "wrap",
-    gap: "10px",
-    marginTop: "10px",
-  },
-
-  action: {
-    border: "1px solid #333",
-    background: "#181818",
-    color: "#eee",
-    borderRadius: "9px",
-    padding: "10px 14px",
-    cursor: "pointer",
-    fontSize: "14px",
-    display: "flex",
-    alignItems: "center",
-    gap: "7px",
-  },
-
-  noteBox: {
-    marginTop: "18px",
-    background: "#181818",
-    border: "1px solid #333",
-    borderRadius: "12px",
-    padding: "16px",
-  },
-
-  noteHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    color: "#eee",
-    marginBottom: "12px",
-  },
-
-  close: {
-    background: "transparent",
-    border: "none",
-    color: "#aaa",
-    fontSize: "22px",
-    cursor: "pointer",
-  },
-
-  textarea: {
-    width: "100%",
-    minHeight: "100px",
-    boxSizing: "border-box",
-    resize: "vertical",
-    background: "#101010",
-    border: "1px solid #333",
-    borderRadius: "8px",
-    color: "#fff",
-    padding: "12px",
-    outline: "none",
-  },
-
-  noteActions: {
-    display: "flex",
-    justifyContent: "flex-end",
-    gap: "10px",
-    marginTop: "10px",
-  },
-
-  cancel: {
-    background: "#292929",
-    border: "none",
-    color: "#ddd",
-    padding: "9px 14px",
-    borderRadius: "7px",
-    cursor: "pointer",
-  },
-
-  save: {
-    background: "#e50914",
-    border: "none",
-    color: "#fff",
-    padding: "9px 14px",
-    borderRadius: "7px",
-    cursor: "pointer",
-  },
-
-  markersSection: {
-    marginTop: "30px",
-  },
-
-  heading: {
-    color: "#fff",
-    fontSize: "21px",
-  },
-
-  empty: {
-    color: "#777",
-    background: "#151515",
-    padding: "18px",
-    borderRadius: "10px",
-  },
-
-  markers: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "8px",
-  },
-
-  marker: {
-    display: "flex",
-    alignItems: "center",
-    background: "#171717",
-    borderRadius: "9px",
-    overflow: "hidden",
-  },
-
-  markerMain: {
-    flex: 1,
-    border: "none",
-    background: "transparent",
-    color: "#eee",
-    textAlign: "left",
-    padding: "12px",
-    cursor: "pointer",
-    display: "flex",
-    alignItems: "center",
-    gap: "12px",
-  },
-
-  markerIcon: {
-    fontSize: "20px",
-  },
-
-  markerType: {
-    marginLeft: "10px",
-    color: "#888",
-    fontSize: "12px",
-  },
-
-  markerText: {
-    display: "block",
-    color: "#aaa",
-    marginTop: "4px",
-    fontSize: "13px",
-  },
-
-  delete: {
-    background: "transparent",
-    border: "none",
-    color: "#666",
-    fontSize: "20px",
-    padding: "12px",
-    cursor: "pointer",
-  },
-};

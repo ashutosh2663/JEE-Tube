@@ -73,3 +73,28 @@ export async function getChannelVideos(channelId, maxResults = 50) {
       publishedAt: item.snippet.publishedAt,
     }));
 }
+
+export async function getVideoDetails(videoId) {
+  const data = await youtubeRequest("videos", {
+    part: "snippet,contentDetails",
+    id: videoId,
+  });
+
+  const video = data.items?.[0];
+
+  if (!video) {
+    throw new Error(`YouTube video not found: ${videoId}`);
+  }
+
+  return {
+    youtubeId: video.id,
+    title: video.snippet?.title || "",
+    description: video.snippet?.description || "",
+    thumbnail:
+      video.snippet?.thumbnails?.high?.url ||
+      video.snippet?.thumbnails?.medium?.url ||
+      video.snippet?.thumbnails?.default?.url ||
+      null,
+    duration: video.contentDetails?.duration || null,
+  };
+}
