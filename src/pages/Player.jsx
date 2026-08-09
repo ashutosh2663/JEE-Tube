@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Layout from "../components/layout/Layout";
+import { supabase } from "../lib/supabase";
 
 const STORAGE_KEY = "jee-tube-study-markers";
 
@@ -11,6 +12,15 @@ const ACTIONS = [
   { type: "formula", icon: "🧮", label: "Formula" },
   { type: "concept", icon: "🧠", label: "Concept" },
 ];
+
+const ICONS = {
+  bookmark: "🔖",
+  important: "⭐",
+  doubt: "❓",
+  formula: "🧮",
+  concept: "🧠",
+  note: "📝",
+};
 
 function formatTime(seconds) {
   const s = Math.floor(seconds || 0);
@@ -28,6 +38,55 @@ function formatTime(seconds) {
   return `${m}:${String(sec).padStart(2, "0")}`;
 }
 
+/*
+  Converts timestamps from a video description into chapters.
+
+  Examples supported:
+
+  0:00 Introduction
+  12:35 Arithmetic Progression
+  1:04:20 Geometric Progression
+*/
+function extractChapters(description = "") {
+  const lines = description.split(/\r?\n/);
+
+  const chapters = [];
+
+  const timestampRegex =
+    /(?:^|\s)(\d{1,2}:\d{2}(?::\d{2})?)\s+(.+?)(?=\s*$)/;
+
+  for (const line of lines) {
+    const match = line.trim().match(timestampRegex);
+
+    if (!match) continue;
+
+    const timeText = match[1];
+    const title = match[2].trim();
+
+    const parts = timeText.split(":").map(Number);
+
+    let seconds = 0;
+
+    if (parts.length === 2) {
+      seconds = parts[0] * 60 + parts[1];
+    } else if (parts.length === 3) {
+      seconds =
+        parts[0] * 3600 +
+        parts[1] * 60 +
+        parts[2];
+    }
+
+    if (!title) continue;
+
+    chapters.push({
+      time: seconds,
+      title,
+    });
+  }
+
+  return chapters.sort((a, b) => a.time - b.time);
+}
+
 export default function Player() {
   const { videoId } = useParams();
   const navigate = useNavigate();
@@ -37,10 +96,18 @@ export default function Player() {
 
   const [currentTime, setCurrentTime] = useState(0);
   const [markers, setMarkers] = useState([]);
+
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteText, setNoteText] = useState("");
 
-  // Load saved markers for this video
+  const [videoInfo, setVideoInfo] = useState(null);
+  const [chapters, setChapters] = useState([]);
+  const [playerReady, setPlayerReady] = useState(false);
+
+  // --------------------------------------------------
+  // Load saved markers
+  // --------------------------------------------------
+
   useEffect(() => {
     try {
       const saved = JSON.parse(
@@ -48,14 +115,19 @@ export default function Player() {
       );
 
       setMarkers(
-        saved.filter((marker) => marker.videoId === videoId)
+        saved.filter(
+          (marker) => marker.videoId === videoId
+        )
       );
     } catch {
       setMarkers([]);
     }
   }, [videoId]);
 
+  // --------------------------------------------------
   // Save markers
+  // --------------------------------------------------
+
   useEffect(() => {
     try {
       const all = JSON.parse(
@@ -68,14 +140,63 @@ export default function Player() {
 
       localStorage.setItem(
         STORAGE_KEY,
-        JSON.stringify([...otherVideos, ...markers])
+        JSON.stringify([
+          ...otherVideos,
+          ...markers,
+        ])
       );
     } catch {
       // Ignore localStorage errors
     }
   }, [markers, videoId]);
 
-  // YouTube IFrame API
+  // --------------------------------------------------
+  // Load video information + chapters from Supabase
+  // --------------------------------------------------
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadVideoInfo() {
+      const { data, error } = await supabase
+        .from("videos")
+        .select(
+          "youtube_id,title,description,thumbnail,teacher,subject,chapter,series_name"
+        )
+        .eq("youtube_id", videoId)
+        .maybeSingle();
+
+      if (error) {
+        console.error(
+          "Player video lookup failed:",
+          error
+        );
+        return;
+      }
+
+      if (cancelled) return;
+
+      if (data) {
+        setVideoInfo(data);
+
+        const extracted =
+          extractChapters(data.description || "");
+
+        setChapters(extracted);
+      }
+    }
+
+    loadVideoInfo();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [videoId]);
+
+  // --------------------------------------------------
+  // YouTube IFrame Player
+  // --------------------------------------------------
+
   useEffect(() => {
     let cancelled = false;
 
@@ -104,19 +225,9 @@ export default function Player() {
         return;
       }
 
-      // Destroy old player if one exists
-      try {
-        playerRef.current?.destroy();
-      } catch {
-        // Ignore
-      }
-
       playerRef.current = new window.YT.Player(
         "jee-tube-player",
         {
-          width: "100%",
-          height: "100%",
-
           videoId,
 
           playerVars: {
@@ -129,14 +240,21 @@ export default function Player() {
 
           events: {
             onReady: () => {
+              if (cancelled) return;
+
+              setPlayerReady(true);
               startTimeTracking();
             },
 
             onStateChange: () => {
               try {
-                setCurrentTime(
-                  playerRef.current?.getCurrentTime?.() || 0
-                );
+                if (
+                  playerRef.current?.getCurrentTime
+                ) {
+                  setCurrentTime(
+                    playerRef.current.getCurrentTime()
+                  );
+                }
               } catch {
                 // Ignore
               }
@@ -146,19 +264,26 @@ export default function Player() {
       );
     }
 
-    if (window.YT && window.YT.Player) {
+    if (
+      window.YT &&
+      window.YT.Player
+    ) {
       createPlayer();
     } else {
-      window.onYouTubeIframeAPIReady = createPlayer;
+      window.onYouTubeIframeAPIReady =
+        createPlayer;
 
       if (
         !document.getElementById(
           "youtube-iframe-api"
         )
       ) {
-        const script = document.createElement("script");
+        const script =
+          document.createElement("script");
 
-        script.id = "youtube-iframe-api";
+        script.id =
+          "youtube-iframe-api";
+
         script.src =
           "https://www.youtube.com/iframe_api";
 
@@ -178,12 +303,19 @@ export default function Player() {
       }
 
       playerRef.current = null;
+      setPlayerReady(false);
     };
   }, [videoId]);
 
+  // --------------------------------------------------
+  // Current timestamp
+  // --------------------------------------------------
+
   function getCurrentTimestamp() {
     try {
-      if (playerRef.current?.getCurrentTime) {
+      if (
+        playerRef.current?.getCurrentTime
+      ) {
         const time =
           playerRef.current.getCurrentTime();
 
@@ -198,15 +330,21 @@ export default function Player() {
     return currentTime;
   }
 
+  // --------------------------------------------------
+  // Add study marker
+  // --------------------------------------------------
+
   function addMarker(type) {
-    const timestamp = getCurrentTimestamp();
+    const timestamp =
+      getCurrentTimestamp();
 
     const marker = {
       id: crypto.randomUUID(),
       videoId,
       type,
       time: timestamp,
-      createdAt: new Date().toISOString(),
+      createdAt:
+        new Date().toISOString(),
       text: "",
     };
 
@@ -215,6 +353,10 @@ export default function Player() {
       marker,
     ]);
   }
+
+  // --------------------------------------------------
+  // Notes
+  // --------------------------------------------------
 
   function openNote() {
     getCurrentTimestamp();
@@ -225,7 +367,8 @@ export default function Player() {
   function saveNote() {
     if (!noteText.trim()) return;
 
-    const timestamp = getCurrentTimestamp();
+    const timestamp =
+      getCurrentTimestamp();
 
     const marker = {
       id: crypto.randomUUID(),
@@ -233,7 +376,8 @@ export default function Player() {
       type: "note",
       time: timestamp,
       text: noteText.trim(),
-      createdAt: new Date().toISOString(),
+      createdAt:
+        new Date().toISOString(),
     };
 
     setMarkers((previous) => [
@@ -245,35 +389,45 @@ export default function Player() {
     setNoteText("");
   }
 
-  function jumpToMarker(marker) {
-    try {
-      playerRef.current?.seekTo(
-        marker.time,
-        true
-      );
+  // --------------------------------------------------
+  // Jump to timestamp
+  // --------------------------------------------------
 
-      playerRef.current?.playVideo();
+  function jumpToTime(time) {
+    try {
+      if (
+        playerRef.current?.seekTo
+      ) {
+        playerRef.current.seekTo(
+          time,
+          true
+        );
+
+        playerRef.current.playVideo();
+
+        setCurrentTime(time);
+      }
     } catch {
       // Ignore
     }
   }
 
+  function jumpToMarker(marker) {
+    jumpToTime(marker.time);
+  }
+
   function deleteMarker(id) {
     setMarkers((previous) =>
       previous.filter(
-        (marker) => marker.id !== id
+        (marker) =>
+          marker.id !== id
       )
     );
   }
 
-  const iconFor = {
-    bookmark: "🔖",
-    important: "⭐",
-    doubt: "❓",
-    formula: "🧮",
-    concept: "🧠",
-    note: "📝",
-  };
+  // --------------------------------------------------
+  // Render
+  // --------------------------------------------------
 
   return (
     <Layout>
@@ -286,22 +440,97 @@ export default function Player() {
           ← Back
         </button>
 
-        {/* VIDEO PLAYER */}
-        <div style={styles.playerWrapper}>
-          <div
-            id="jee-tube-player"
-            style={styles.youtubePlayer}
-          />
+        {videoInfo?.title && (
+          <div style={styles.videoTitle}>
+            {videoInfo.title}
+          </div>
+        )}
+
+        <div style={styles.playerArea}>
+
+          <div style={styles.playerWrapper}>
+            <div
+              id="jee-tube-player"
+              style={styles.youtubePlayer}
+            />
+          </div>
+
+          {chapters.length > 0 && (
+            <aside style={styles.chapterPanel}>
+
+              <div style={styles.chapterHeader}>
+                <strong>Chapters</strong>
+                <span>
+                  {chapters.length}
+                </span>
+              </div>
+
+              <div style={styles.chapterList}>
+                {chapters.map(
+                  (chapter, index) => {
+                    const nextChapter =
+                      chapters[index + 1];
+
+                    const active =
+                      currentTime >=
+                        chapter.time &&
+                      (!nextChapter ||
+                        currentTime <
+                          nextChapter.time);
+
+                    return (
+                      <button
+                        key={`${chapter.time}-${index}`}
+                        onClick={() =>
+                          jumpToTime(
+                            chapter.time
+                          )
+                        }
+                        style={{
+                          ...styles.chapter,
+                          ...(active
+                            ? styles.chapterActive
+                            : {}),
+                        }}
+                      >
+                        <span
+                          style={
+                            styles.chapterTime
+                          }
+                        >
+                          {formatTime(
+                            chapter.time
+                          )}
+                        </span>
+
+                        <span
+                          style={
+                            styles.chapterTitle
+                          }
+                        >
+                          {chapter.title}
+                        </span>
+                      </button>
+                    );
+                  }
+                )}
+              </div>
+
+            </aside>
+          )}
+
         </div>
 
         <div style={styles.timeBar}>
-          Current position:{" "}
-          <strong>
-            {formatTime(currentTime)}
-          </strong>
+          {playerReady
+            ? `Current position: ${formatTime(
+                currentTime
+              )}`
+            : "Loading player..."}
         </div>
 
-        {/* STUDY ACTIONS */}
+        {/* STUDY TOOLBAR */}
+
         <div style={styles.toolbar}>
           {ACTIONS.map((action) => (
             <button
@@ -327,12 +556,17 @@ export default function Player() {
         </div>
 
         {/* NOTE BOX */}
+
         {noteOpen && (
           <div style={styles.noteBox}>
-            <div style={styles.noteHeader}>
+            <div
+              style={styles.noteHeader}
+            >
               <strong>
                 Note at{" "}
-                {formatTime(currentTime)}
+                {formatTime(
+                  currentTime
+                )}
               </strong>
 
               <button
@@ -349,13 +583,19 @@ export default function Player() {
               autoFocus
               value={noteText}
               onChange={(e) =>
-                setNoteText(e.target.value)
+                setNoteText(
+                  e.target.value
+                )
               }
               placeholder="Write your note..."
               style={styles.textarea}
             />
 
-            <div style={styles.noteActions}>
+            <div
+              style={
+                styles.noteActions
+              }
+            >
               <button
                 onClick={() =>
                   setNoteOpen(false)
@@ -376,22 +616,26 @@ export default function Player() {
         )}
 
         {/* STUDY POINTS */}
-        <section style={styles.markersSection}>
+
+        <section
+          style={styles.markersSection}
+        >
           <h2 style={styles.heading}>
             My Study Points
           </h2>
 
           {markers.length === 0 ? (
             <div style={styles.empty}>
-              Pause the lecture and save a
-              bookmark, important point, doubt,
-              formula or concept.
+              Pause the lecture and save
+              a bookmark, important point,
+              doubt, formula or concept.
             </div>
           ) : (
             <div style={styles.markers}>
               {[...markers]
                 .sort(
-                  (a, b) => a.time - b.time
+                  (a, b) =>
+                    a.time - b.time
                 )
                 .map((marker) => (
                   <div
@@ -400,16 +644,24 @@ export default function Player() {
                   >
                     <button
                       onClick={() =>
-                        jumpToMarker(marker)
+                        jumpToMarker(
+                          marker
+                        )
                       }
-                      style={styles.markerMain}
+                      style={
+                        styles.markerMain
+                      }
                     >
                       <span
                         style={
                           styles.markerIcon
                         }
                       >
-                        {iconFor[marker.type]}
+                        {
+                          ICONS[
+                            marker.type
+                          ]
+                        }
                       </span>
 
                       <span>
@@ -445,7 +697,9 @@ export default function Player() {
                           marker.id
                         )
                       }
-                      style={styles.delete}
+                      style={
+                        styles.delete
+                      }
                       title="Delete"
                     >
                       ×
@@ -455,6 +709,7 @@ export default function Player() {
             </div>
           )}
         </section>
+
       </div>
     </Layout>
   );
@@ -463,9 +718,9 @@ export default function Player() {
 const styles = {
   page: {
     width: "100%",
-    maxWidth: "1250px",
+    maxWidth: "1400px",
     margin: "0 auto",
-    paddingBottom: "50px",
+    paddingBottom: "60px",
   },
 
   back: {
@@ -474,7 +729,22 @@ const styles = {
     color: "#aaa",
     fontSize: "15px",
     cursor: "pointer",
+    marginBottom: "12px",
+  },
+
+  videoTitle: {
+    color: "#fff",
+    fontSize: "20px",
+    fontWeight: 700,
     marginBottom: "15px",
+  },
+
+  playerArea: {
+    display: "grid",
+    gridTemplateColumns:
+      "minmax(0, 1fr) 300px",
+    gap: "15px",
+    alignItems: "start",
   },
 
   playerWrapper: {
@@ -489,6 +759,62 @@ const styles = {
   youtubePlayer: {
     width: "100%",
     height: "100%",
+  },
+
+  chapterPanel: {
+    background: "#151515",
+    border: "1px solid #292929",
+    borderRadius: "12px",
+    overflow: "hidden",
+    maxHeight: "calc(100vh - 160px)",
+    minHeight: "200px",
+  },
+
+  chapterHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: "14px 16px",
+    borderBottom: "1px solid #292929",
+    color: "#fff",
+    fontSize: "15px",
+  },
+
+  chapterList: {
+    overflowY: "auto",
+    maxHeight: "calc(100vh - 220px)",
+  },
+
+  chapter: {
+    width: "100%",
+    display: "flex",
+    alignItems: "flex-start",
+    gap: "10px",
+    textAlign: "left",
+    padding: "11px 14px",
+    border: "none",
+    borderBottom: "1px solid #222",
+    background: "transparent",
+    color: "#aaa",
+    cursor: "pointer",
+  },
+
+  chapterActive: {
+    background: "#241010",
+    color: "#fff",
+    borderLeft: "3px solid #e50914",
+  },
+
+  chapterTime: {
+    minWidth: "48px",
+    color: "#e50914",
+    fontSize: "12px",
+    fontWeight: 700,
+  },
+
+  chapterTitle: {
+    fontSize: "13px",
+    lineHeight: 1.35,
   },
 
   timeBar: {
