@@ -5,26 +5,118 @@ import { searchYoutube } from "../api/youtube";
 import { subjectRows } from "../data/subjectRows";
 import { supabase } from "../lib/supabase";
 
+function convertLibraryVideo(video) {
+  return {
+    id: {
+      videoId: video.youtube_id,
+    },
+    snippet: {
+      title: video.title,
+      description: video.description || "",
+      channelTitle: video.channel_name || "JEE-Tube",
+      thumbnails: {
+        medium: {
+          url: video.thumbnail,
+        },
+        default: {
+          url: video.thumbnail,
+        },
+      },
+    },
+  };
+}
+
+function addUniqueVideos(existing = [], incoming = []) {
+  const result = [...existing];
+
+  for (const video of incoming) {
+    const id =
+      video?.id?.videoId ||
+      video?.id ||
+      video?.videoId;
+
+    if (!id) continue;
+
+    const alreadyExists = result.some(
+      (item) =>
+        (item?.id?.videoId ||
+          item?.id ||
+          item?.videoId) === id
+    );
+
+    if (!alreadyExists) {
+      result.push(video);
+    }
+  }
+
+  return result;
+}
+
 export default function Maths() {
   const [rows, setRows] = useState({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
+
     async function loadMaths() {
-      try {
-        const result = {};
+      setLoading(true);
 
-        // Load normal YouTube results
-        for (const row of subjectRows.Maths) {
-          const videos = await searchYoutube(row.query);
+      // Start with every Maths section so the page
+      // always renders even if YouTube search fails.
+      const result = {};
 
-          result[row.title] = Array.isArray(videos)
-            ? videos.slice(0, 20)
-            : [];
+      subjectRows.Maths.forEach((row) => {
+        result[row.title] = [];
+      });
+
+      // --------------------------------------------------
+      // 1. Load YouTube results independently
+      // --------------------------------------------------
+
+      const youtubeResults = await Promise.allSettled(
+        subjectRows.Maths.map(async (row) => {
+          try {
+            const videos = await searchYoutube(
+              row.query
+            );
+
+            return {
+              title: row.title,
+              videos: Array.isArray(videos)
+                ? videos.slice(0, 20)
+                : [],
+            };
+          } catch (error) {
+            console.error(
+              `Maths YouTube search failed: ${row.title}`,
+              error
+            );
+
+            return {
+              title: row.title,
+              videos: [],
+            };
+          }
+        })
+      );
+
+      youtubeResults.forEach((item) => {
+        if (
+          item.status === "fulfilled" &&
+          item.value
+        ) {
+          result[item.value.title] =
+            item.value.videos;
         }
+      });
 
-        // Load videos deliberately added to the JEE-Tube library
-        const { data: libraryVideos, error } = await supabase
+      // --------------------------------------------------
+      // 2. Load JEE-Tube library videos
+      // --------------------------------------------------
+
+      const { data: libraryVideos, error } =
+        await supabase
           .from("videos")
           .select("*")
           .eq("subject", "Maths")
@@ -34,96 +126,150 @@ export default function Maths() {
             nullsFirst: false,
           });
 
-        if (error) {
-          console.error("Maths library error:", error);
-        }
+      if (error) {
+        console.error(
+          "Maths library error:",
+          error
+        );
+      }
 
-        if (Array.isArray(libraryVideos)) {
-          for (const video of libraryVideos) {
-            const chapter = String(video.chapter || "").toLowerCase();
-            const series = String(video.series_name || "").toLowerCase();
+      // --------------------------------------------------
+      // 3. Put library videos into the correct sections
+      // --------------------------------------------------
 
-            let matchingRow = null;
+      if (Array.isArray(libraryVideos)) {
+        for (const video of libraryVideos) {
+          const chapter = String(
+            video.chapter || ""
+          ).toLowerCase();
 
-            // Sequence & Series belongs to the Manzil Series section
-            if (
-              chapter.includes("sequence & series") ||
-              chapter.includes("sequence and series") ||
-              series.includes("sequence & series") ||
-              series.includes("sequence and series")
-            ) {
-              matchingRow = subjectRows.Maths.find((row) =>
-                row.title.toLowerCase().includes("manzil")
+          const category = String(
+            video.category || ""
+          ).toLowerCase();
+
+          const seriesName = String(
+            video.series_name || ""
+          ).toLowerCase();
+
+          const title = String(
+            video.title || ""
+          ).toLowerCase();
+
+          const converted =
+            convertLibraryVideo(video);
+
+          // ----------------------------------------------
+          // MANZIL SERIES
+          // ----------------------------------------------
+          //
+          // Sequence & Series belongs to Manzil,
+          // so deliberately place it in the Manzil row.
+
+          if (
+            seriesName.includes("manzil") ||
+            title.includes("manzil") ||
+            category.includes("manzil")
+          ) {
+            const manzilRow =
+              subjectRows.Maths.find((row) =>
+                row.title
+                  .toLowerCase()
+                  .includes("manzil")
               );
-            }
 
-            // Fallback for other library videos
-            if (!matchingRow) {
-              matchingRow = subjectRows.Maths.find((row) => {
-                const title = row.title.toLowerCase();
-
-                return (
-                  title.includes(chapter) ||
-                  chapter.includes(title)
+            if (manzilRow) {
+              result[manzilRow.title] =
+                addUniqueVideos(
+                  result[manzilRow.title],
+                  [converted]
                 );
-              });
             }
 
-            if (!matchingRow) continue;
+            continue;
+          }
 
-            // Convert Supabase video into the format VideoCard expects
-            const convertedVideo = {
-              id: {
-                videoId: video.youtube_id,
-              },
+          // ----------------------------------------------
+          // SEQUENCE & SERIES
+          // ----------------------------------------------
 
-              snippet: {
-                title: video.title,
-                description: video.description || "",
-                channelTitle:
-                  video.channel_name || "JEE-Tube",
+          if (
+            chapter.includes(
+              "sequence"
+            ) ||
+            chapter.includes("series") ||
+            title.includes(
+              "sequence & series"
+            ) ||
+            title.includes(
+              "sequence and series"
+            )
+          ) {
+            const manzilRow =
+              subjectRows.Maths.find((row) =>
+                row.title
+                  .toLowerCase()
+                  .includes("manzil")
+              );
 
-                thumbnails: {
-                  medium: {
-                    url: video.thumbnail,
-                  },
-                  default: {
-                    url: video.thumbnail,
-                  },
-                },
-              },
-            };
+            if (manzilRow) {
+              result[manzilRow.title] =
+                addUniqueVideos(
+                  result[manzilRow.title],
+                  [converted]
+                );
+            }
 
-            // Put the library video at the beginning
-            result[matchingRow.title] = [
-              convertedVideo,
+            continue;
+          }
 
-              ...(result[matchingRow.title] || []).filter(
-                (existing) =>
-                  existing?.id?.videoId !== video.youtube_id
-              ),
-            ];
+          // ----------------------------------------------
+          // Other library videos
+          // ----------------------------------------------
+
+          const matchingRow =
+            subjectRows.Maths.find((row) => {
+              const rowTitle =
+                row.title.toLowerCase();
+
+              return (
+                rowTitle.includes(chapter) ||
+                chapter.includes(rowTitle)
+              );
+            });
+
+          if (matchingRow) {
+            result[matchingRow.title] =
+              addUniqueVideos(
+                result[matchingRow.title],
+                [converted]
+              );
           }
         }
+      }
 
+      if (!cancelled) {
         setRows(result);
-      } catch (error) {
-        console.error("Maths loading error:", error);
-      } finally {
         setLoading(false);
       }
     }
 
     loadMaths();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return (
     <Layout>
       <div style={styles.page}>
-        <h1 style={styles.heading}>Maths</h1>
+        <h1 style={styles.heading}>
+          Maths
+        </h1>
 
         <p style={styles.subtitle}>
-          JEE Maths lectures, teachers, series and advanced problems
+          JEE Maths lectures, teachers,
+          series and advanced problems
         </p>
 
         {loading && (
@@ -132,14 +278,14 @@ export default function Maths() {
           </p>
         )}
 
-        {!loading &&
-          subjectRows.Maths.map((row) => (
-            <SubjectRow
-              key={row.title}
-              title={row.title}
-              videos={rows[row.title] || []}
-            />
-          ))}
+        {subjectRows.Maths.map((row) => (
+          <SubjectRow
+            key={row.title}
+            title={row.title}
+            videos={rows[row.title] || []}
+            loading={loading}
+          />
+        ))}
       </div>
     </Layout>
   );
