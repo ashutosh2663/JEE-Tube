@@ -12,17 +12,35 @@ export default function Physics() {
   useEffect(() => {
     async function loadPhysics() {
       try {
-        const result = {};
+        const results = await Promise.all(
+          subjectRows.Physics.map(async (row) => {
+            try {
+              const videos = await searchYoutube(row.query);
 
-        for (const row of subjectRows.Physics) {
-          const videos = await searchYoutube(row.query);
+              return {
+                title: row.title,
+                videos: Array.isArray(videos)
+                  ? videos.slice(0, 20)
+                  : [],
+              };
+            } catch (error) {
+              console.error(`Physics row failed: ${row.title}`, error);
 
-          result[row.title] = Array.isArray(videos)
-            ? videos.slice(0, 20)
-            : [];
-        }
+              return {
+                title: row.title,
+                videos: [],
+              };
+            }
+          })
+        );
 
-        setRows(result);
+        const formattedRows = {};
+
+        results.forEach((row) => {
+          formattedRows[row.title] = row.videos;
+        });
+
+        setRows(formattedRows);
       } catch (error) {
         console.error("Physics loading error:", error);
       } finally {
@@ -42,18 +60,14 @@ export default function Physics() {
           JEE Physics lectures, series, teachers and problem solving
         </p>
 
-        {loading && (
-          <p style={styles.loading}>Loading Physics library...</p>
-        )}
-
-        {!loading &&
-          subjectRows.Physics.map((row) => (
-            <SubjectRow
-              key={row.title}
-              title={row.title}
-              videos={rows[row.title] || []}
-            />
-          ))}
+        {subjectRows.Physics.map((row) => (
+          <SubjectRow
+            key={row.title}
+            title={row.title}
+            videos={rows[row.title] || []}
+            loading={loading}
+          />
+        ))}
       </div>
     </Layout>
   );
@@ -74,10 +88,4 @@ const styles = {
     color: "#888",
     marginTop: "8px",
   },
-
-  loading: {
-    color: "#aaa",
-    marginTop: "30px",
-  },
 };
-
