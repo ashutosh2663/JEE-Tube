@@ -14,6 +14,7 @@ export default function Maths() {
       try {
         const result = {};
 
+        // Load normal YouTube results
         for (const row of subjectRows.Maths) {
           const videos = await searchYoutube(row.query);
 
@@ -22,7 +23,7 @@ export default function Maths() {
             : [];
         }
 
-        // Get videos that were deliberately added to the JEE-Tube library
+        // Load videos deliberately added to the JEE-Tube library
         const { data: libraryVideos, error } = await supabase
           .from("videos")
           .select("*")
@@ -37,31 +38,51 @@ export default function Maths() {
           console.error("Maths library error:", error);
         }
 
-        // Put library videos into the matching Maths section
         if (Array.isArray(libraryVideos)) {
           for (const video of libraryVideos) {
-            const chapter = video.chapter;
+            const chapter = String(video.chapter || "").toLowerCase();
+            const series = String(video.series_name || "").toLowerCase();
 
-            const matchingRow = subjectRows.Maths.find(
-              (row) =>
-                row.title
-                  .toLowerCase()
-                  .includes(String(chapter || "").toLowerCase()) ||
-                String(chapter || "")
-                  .toLowerCase()
-                  .includes(row.title.toLowerCase())
-            );
+            let matchingRow = null;
+
+            // Sequence & Series belongs to the Manzil Series section
+            if (
+              chapter.includes("sequence & series") ||
+              chapter.includes("sequence and series") ||
+              series.includes("sequence & series") ||
+              series.includes("sequence and series")
+            ) {
+              matchingRow = subjectRows.Maths.find((row) =>
+                row.title.toLowerCase().includes("manzil")
+              );
+            }
+
+            // Fallback for other library videos
+            if (!matchingRow) {
+              matchingRow = subjectRows.Maths.find((row) => {
+                const title = row.title.toLowerCase();
+
+                return (
+                  title.includes(chapter) ||
+                  chapter.includes(title)
+                );
+              });
+            }
 
             if (!matchingRow) continue;
 
+            // Convert Supabase video into the format VideoCard expects
             const convertedVideo = {
               id: {
                 videoId: video.youtube_id,
               },
+
               snippet: {
                 title: video.title,
                 description: video.description || "",
-                channelTitle: video.channel_name || "JEE-Tube",
+                channelTitle:
+                  video.channel_name || "JEE-Tube",
+
                 thumbnails: {
                   medium: {
                     url: video.thumbnail,
@@ -73,8 +94,10 @@ export default function Maths() {
               },
             };
 
+            // Put the library video at the beginning
             result[matchingRow.title] = [
               convertedVideo,
+
               ...(result[matchingRow.title] || []).filter(
                 (existing) =>
                   existing?.id?.videoId !== video.youtube_id
