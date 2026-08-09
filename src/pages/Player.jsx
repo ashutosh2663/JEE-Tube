@@ -40,7 +40,7 @@ export default function Player() {
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteText, setNoteText] = useState("");
 
-  // Load saved study markers
+  // Load saved markers for this video
   useEffect(() => {
     try {
       const saved = JSON.parse(
@@ -75,44 +75,9 @@ export default function Player() {
     }
   }, [markers, videoId]);
 
-  // Load YouTube IFrame API
+  // YouTube IFrame API
   useEffect(() => {
     let cancelled = false;
-
-    function createPlayer() {
-      if (cancelled || !window.YT || !window.YT.Player) return;
-
-      playerRef.current = new window.YT.Player("jee-tube-player", {
-        videoId,
-
-        playerVars: {
-          autoplay: 0,
-          controls: 1,
-          rel: 0,
-          modestbranding: 1,
-          playsinline: 1,
-        },
-
-        events: {
-          onReady: () => {
-            startTimeTracking();
-          },
-        },
-      });
-    }
-
-    if (window.YT && window.YT.Player) {
-      createPlayer();
-    } else {
-      window.onYouTubeIframeAPIReady = createPlayer;
-
-      if (!document.getElementById("youtube-iframe-api")) {
-        const script = document.createElement("script");
-        script.id = "youtube-iframe-api";
-        script.src = "https://www.youtube.com/iframe_api";
-        document.body.appendChild(script);
-      }
-    }
 
     function startTimeTracking() {
       clearInterval(intervalRef.current);
@@ -120,7 +85,9 @@ export default function Player() {
       intervalRef.current = setInterval(() => {
         try {
           if (playerRef.current?.getCurrentTime) {
-            setCurrentTime(playerRef.current.getCurrentTime());
+            setCurrentTime(
+              playerRef.current.getCurrentTime()
+            );
           }
         } catch {
           // Player not ready
@@ -128,14 +95,86 @@ export default function Player() {
       }, 500);
     }
 
+    function createPlayer() {
+      if (
+        cancelled ||
+        !window.YT ||
+        !window.YT.Player
+      ) {
+        return;
+      }
+
+      // Destroy old player if one exists
+      try {
+        playerRef.current?.destroy();
+      } catch {
+        // Ignore
+      }
+
+      playerRef.current = new window.YT.Player(
+        "jee-tube-player",
+        {
+          width: "100%",
+          height: "100%",
+
+          videoId,
+
+          playerVars: {
+            autoplay: 0,
+            controls: 1,
+            rel: 0,
+            modestbranding: 1,
+            playsinline: 1,
+          },
+
+          events: {
+            onReady: () => {
+              startTimeTracking();
+            },
+
+            onStateChange: () => {
+              try {
+                setCurrentTime(
+                  playerRef.current?.getCurrentTime?.() || 0
+                );
+              } catch {
+                // Ignore
+              }
+            },
+          },
+        }
+      );
+    }
+
+    if (window.YT && window.YT.Player) {
+      createPlayer();
+    } else {
+      window.onYouTubeIframeAPIReady = createPlayer;
+
+      if (
+        !document.getElementById(
+          "youtube-iframe-api"
+        )
+      ) {
+        const script = document.createElement("script");
+
+        script.id = "youtube-iframe-api";
+        script.src =
+          "https://www.youtube.com/iframe_api";
+
+        document.body.appendChild(script);
+      }
+    }
+
     return () => {
       cancelled = true;
+
       clearInterval(intervalRef.current);
 
       try {
         playerRef.current?.destroy();
       } catch {
-        // Ignore destroy errors
+        // Ignore
       }
 
       playerRef.current = null;
@@ -145,8 +184,11 @@ export default function Player() {
   function getCurrentTimestamp() {
     try {
       if (playerRef.current?.getCurrentTime) {
-        const time = playerRef.current.getCurrentTime();
+        const time =
+          playerRef.current.getCurrentTime();
+
         setCurrentTime(time);
+
         return time;
       }
     } catch {
@@ -168,7 +210,10 @@ export default function Player() {
       text: "",
     };
 
-    setMarkers((previous) => [...previous, marker]);
+    setMarkers((previous) => [
+      ...previous,
+      marker,
+    ]);
   }
 
   function openNote() {
@@ -191,23 +236,33 @@ export default function Player() {
       createdAt: new Date().toISOString(),
     };
 
-    setMarkers((previous) => [...previous, marker]);
+    setMarkers((previous) => [
+      ...previous,
+      marker,
+    ]);
+
     setNoteOpen(false);
     setNoteText("");
   }
 
   function jumpToMarker(marker) {
     try {
-      playerRef.current?.seekTo(marker.time, true);
+      playerRef.current?.seekTo(
+        marker.time,
+        true
+      );
+
       playerRef.current?.playVideo();
     } catch {
-      // Ignore if player isn't ready
+      // Ignore
     }
   }
 
   function deleteMarker(id) {
     setMarkers((previous) =>
-      previous.filter((marker) => marker.id !== id)
+      previous.filter(
+        (marker) => marker.id !== id
+      )
     );
   }
 
@@ -223,6 +278,7 @@ export default function Player() {
   return (
     <Layout>
       <div style={styles.page}>
+
         <button
           onClick={() => navigate(-1)}
           style={styles.back}
@@ -230,19 +286,29 @@ export default function Player() {
           ← Back
         </button>
 
+        {/* VIDEO PLAYER */}
         <div style={styles.playerWrapper}>
-          <div id="jee-tube-player" />
+          <div
+            id="jee-tube-player"
+            style={styles.youtubePlayer}
+          />
         </div>
 
         <div style={styles.timeBar}>
-          Current position: <strong>{formatTime(currentTime)}</strong>
+          Current position:{" "}
+          <strong>
+            {formatTime(currentTime)}
+          </strong>
         </div>
 
+        {/* STUDY ACTIONS */}
         <div style={styles.toolbar}>
           {ACTIONS.map((action) => (
             <button
               key={action.type}
-              onClick={() => addMarker(action.type)}
+              onClick={() =>
+                addMarker(action.type)
+              }
               style={styles.action}
               title={`Save ${action.label} at current position`}
             >
@@ -260,15 +326,19 @@ export default function Player() {
           </button>
         </div>
 
+        {/* NOTE BOX */}
         {noteOpen && (
           <div style={styles.noteBox}>
             <div style={styles.noteHeader}>
               <strong>
-                Note at {formatTime(currentTime)}
+                Note at{" "}
+                {formatTime(currentTime)}
               </strong>
 
               <button
-                onClick={() => setNoteOpen(false)}
+                onClick={() =>
+                  setNoteOpen(false)
+                }
                 style={styles.close}
               >
                 ×
@@ -278,14 +348,18 @@ export default function Player() {
             <textarea
               autoFocus
               value={noteText}
-              onChange={(e) => setNoteText(e.target.value)}
+              onChange={(e) =>
+                setNoteText(e.target.value)
+              }
               placeholder="Write your note..."
               style={styles.textarea}
             />
 
             <div style={styles.noteActions}>
               <button
-                onClick={() => setNoteOpen(false)}
+                onClick={() =>
+                  setNoteOpen(false)
+                }
                 style={styles.cancel}
               >
                 Cancel
@@ -301,6 +375,7 @@ export default function Player() {
           </div>
         )}
 
+        {/* STUDY POINTS */}
         <section style={styles.markersSection}>
           <h2 style={styles.heading}>
             My Study Points
@@ -308,37 +383,56 @@ export default function Player() {
 
           {markers.length === 0 ? (
             <div style={styles.empty}>
-              Pause the lecture and save a bookmark, important point,
-              doubt, formula or concept.
+              Pause the lecture and save a
+              bookmark, important point, doubt,
+              formula or concept.
             </div>
           ) : (
             <div style={styles.markers}>
               {[...markers]
-                .sort((a, b) => a.time - b.time)
+                .sort(
+                  (a, b) => a.time - b.time
+                )
                 .map((marker) => (
                   <div
                     key={marker.id}
                     style={styles.marker}
                   >
                     <button
-                      onClick={() => jumpToMarker(marker)}
+                      onClick={() =>
+                        jumpToMarker(marker)
+                      }
                       style={styles.markerMain}
                     >
-                      <span style={styles.markerIcon}>
+                      <span
+                        style={
+                          styles.markerIcon
+                        }
+                      >
                         {iconFor[marker.type]}
                       </span>
 
                       <span>
                         <strong>
-                          {formatTime(marker.time)}
+                          {formatTime(
+                            marker.time
+                          )}
                         </strong>
 
-                        <span style={styles.markerType}>
+                        <span
+                          style={
+                            styles.markerType
+                          }
+                        >
                           {marker.type}
                         </span>
 
                         {marker.text && (
-                          <span style={styles.markerText}>
+                          <span
+                            style={
+                              styles.markerText
+                            }
+                          >
                             {marker.text}
                           </span>
                         )}
@@ -346,7 +440,11 @@ export default function Player() {
                     </button>
 
                     <button
-                      onClick={() => deleteMarker(marker.id)}
+                      onClick={() =>
+                        deleteMarker(
+                          marker.id
+                        )
+                      }
                       style={styles.delete}
                       title="Delete"
                     >
@@ -385,6 +483,12 @@ const styles = {
     background: "#000",
     borderRadius: "12px",
     overflow: "hidden",
+    position: "relative",
+  },
+
+  youtubePlayer: {
+    width: "100%",
+    height: "100%",
   },
 
   timeBar: {
