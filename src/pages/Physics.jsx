@@ -2,53 +2,63 @@
 import { useEffect, useState } from "react";
 import Layout from "../components/layout/Layout";
 import SubjectRow from "../components/home/SubjectRow";
-import { searchYoutube } from "../api/youtube";
-import { subjectRows } from "../data/subjectRows";
+import { supabase } from "../lib/supabase";
 
 export default function Physics() {
-  const [rows, setRows] = useState({});
+  const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function loadPhysics() {
+    async function loadPhysicsVideos() {
       try {
-        const results = await Promise.all(
-          subjectRows.Physics.map(async (row) => {
-            try {
-              const videos = await searchYoutube(row.query);
+        const { data, error } = await supabase
+          .from("videos")
+          .select("*")
+          .eq("subject", "Physics")
+          .eq("status", "active")
+          .order("chapter", { ascending: true })
+          .order("series_name", { ascending: true })
+          .order("sequence_order", { ascending: true, nullsFirst: false });
 
-              return {
-                title: row.title,
-                videos: Array.isArray(videos)
-                  ? videos.slice(0, 20)
-                  : [],
-              };
-            } catch (error) {
-              console.error(`Physics row failed: ${row.title}`, error);
+        if (error) {
+          throw error;
+        }
 
-              return {
-                title: row.title,
-                videos: [],
-              };
-            }
+        const videos = Array.isArray(data) ? data : [];
+
+        // Group videos by Chapter + Series
+        const grouped = {};
+
+        videos.forEach((video) => {
+          const chapter = video.chapter || "Other Physics";
+          const series = video.series_name || "JEE Physics";
+
+          const key = `${chapter} — ${series}`;
+
+          if (!grouped[key]) {
+            grouped[key] = [];
+          }
+
+          grouped[key].push(video);
+        });
+
+        const formattedRows = Object.entries(grouped).map(
+          ([title, videos]) => ({
+            title,
+            videos,
           })
         );
 
-        const formattedRows = {};
-
-        results.forEach((row) => {
-          formattedRows[row.title] = row.videos;
-        });
-
         setRows(formattedRows);
       } catch (error) {
-        console.error("Physics loading error:", error);
+        console.error("Physics videos loading error:", error);
+        setRows([]);
       } finally {
         setLoading(false);
       }
     }
 
-    loadPhysics();
+    loadPhysicsVideos();
   }, []);
 
   return (
@@ -60,14 +70,26 @@ export default function Physics() {
           JEE Physics lectures, series, teachers and problem solving
         </p>
 
-        {subjectRows.Physics.map((row) => (
+        {loading ? (
           <SubjectRow
-            key={row.title}
-            title={row.title}
-            videos={rows[row.title] || []}
-            loading={loading}
+            title="Loading Physics..."
+            videos={[]}
+            loading={true}
           />
-        ))}
+        ) : rows.length === 0 ? (
+          <div style={styles.empty}>
+            No Physics videos found in the library.
+          </div>
+        ) : (
+          rows.map((row) => (
+            <SubjectRow
+              key={row.title}
+              title={row.title}
+              videos={row.videos}
+              loading={false}
+            />
+          ))
+        )}
       </div>
     </Layout>
   );
@@ -87,5 +109,11 @@ const styles = {
   subtitle: {
     color: "#888",
     marginTop: "8px",
+  },
+
+  empty: {
+    color: "#777",
+    padding: "40px 0",
+    fontSize: "16px",
   },
 };

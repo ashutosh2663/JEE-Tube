@@ -3,10 +3,34 @@ import { useNavigate } from "react-router-dom";
 export default function VideoCard({ video }) {
   const navigate = useNavigate();
 
-  const videoId = video?.id?.videoId;
-  const snippet = video?.snippet;
+  // Supports both:
+  // 1. Supabase videos
+  // 2. Old YouTube API results
+  const videoId =
+    video?.youtube_id ||
+    video?.id?.videoId ||
+    video?.videoId ||
+    video?.id;
 
-  if (!videoId || !snippet) return null;
+  const title =
+    video?.title ||
+    video?.snippet?.title ||
+    "Untitled video";
+
+  const thumbnail =
+    video?.thumbnail ||
+    video?.snippet?.thumbnails?.medium?.url ||
+    video?.snippet?.thumbnails?.high?.url ||
+    video?.snippet?.thumbnails?.default?.url ||
+    `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+
+  const channel =
+    video?.channel_name ||
+    video?.channelName ||
+    video?.snippet?.channelTitle ||
+    "JEE Tube";
+
+  if (!videoId) return null;
 
   function openVideo() {
     navigate(`/player/${videoId}`);
@@ -40,11 +64,8 @@ export default function VideoCard({ video }) {
         }}
       >
         <img
-          src={
-            snippet.thumbnails?.medium?.url ||
-            snippet.thumbnails?.default?.url
-          }
-          alt={snippet.title}
+          src={thumbnail}
+          alt={title}
           loading="lazy"
           style={{
             width: "100%",
@@ -83,7 +104,7 @@ export default function VideoCard({ video }) {
             overflow: "hidden",
           }}
         >
-          {snippet.title}
+          {title}
         </h3>
 
         <p
@@ -93,7 +114,7 @@ export default function VideoCard({ video }) {
             fontSize: "13px",
           }}
         >
-          {snippet.channelTitle}
+          {channel}
         </p>
       </div>
     </article>
