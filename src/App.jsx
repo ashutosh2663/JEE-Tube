@@ -1,24 +1,29 @@
 import "./index.css";
+import { Routes, Route } from "react-router-dom";
+
+import Login from "./pages/Login";
+import Home from "./pages/Home";
+import Physics from "./pages/Physics";
+import Player from "./pages/Player";
+
+import ProtectedRoute from "./components/auth/ProtectedRoute";
 
 function App() {
   return (
-    <div className="app">
-      <div className="background"></div>
+    <Routes>
+      {/* Public route */}
+      <Route path="/login" element={<Login />} />
 
-      <div className="content">
-        <h1 className="logo">
-          <span>JEE</span> Tube
-        </h1>
+      {/* Everything below requires login */}
+      <Route element={<ProtectedRoute />}>
+        <Route path="/" element={<Home />} />
+        <Route path="/physics" element={<Physics />} />
+        <Route path="/player/:videoId" element={<Player />} />
+      </Route>
 
-        <p className="tagline">
-          The Ultimate Study Platform
-        </p>
-
-        <button className="enterBtn">
-          Enter JEE Tube
-        </button>
-      </div>
-    </div>
+      {/* Fallback */}
+      <Route path="*" element={<Login />} />
+    </Routes>
   );
 }
 

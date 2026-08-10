@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Layout from "../components/layout/Layout";
+import { supabase } from "../lib/supabase";
 import "../styles/player.css";
-
-const STORAGE_KEY = "jee-tube-study-markers";
 
 const ACTIONS = [
   { type: "bookmark", icon: "🔖", label: "Bookmark" },
@@ -15,7 +14,7 @@ const ACTIONS = [
 
 /*
  * Sequence & Series chapter data.
- * You already extracted these timestamps from YouTube.
+ * These timestamps came from your extracted YouTube description.
  */
 const VIDEO_CHAPTERS = {
   zOdUhsMydtM: [
@@ -32,12 +31,20 @@ const VIDEO_CHAPTERS = {
     { id: "chapter-11", time: 14542, title: "Means" },
     { id: "chapter-12", time: 14834, title: "Inserting Means" },
     { id: "chapter-13", time: 16770, title: "Important Concepts" },
-    { id: "chapter-14", time: 17367, title: "Arithmetic geometric progression" },
+    {
+      id: "chapter-14",
+      time: 17367,
+      title: "Arithmetic geometric progression",
+    },
     { id: "chapter-15", time: 19184, title: "Properties of Sigma" },
     { id: "chapter-16", time: 19557, title: "Formulas of Sigma" },
     { id: "chapter-17", time: 20232, title: "Miscellaneous sequences" },
     { id: "chapter-18", time: 21498, title: "Shortcut method for Tn" },
-    { id: "chapter-19", time: 22085, title: "Telescopic method of difference" },
+    {
+      id: "chapter-19",
+      time: 22085,
+      title: "Telescopic method of difference",
+    },
     { id: "chapter-20", time: 25390, title: "AM-GM-HM Inequality" },
     { id: "chapter-21", time: 26457, title: "Exponential Series" },
     { id: "chapter-22", time: 28412, title: "Logarithmic Series" },
@@ -93,57 +100,202 @@ export default function Player() {
 
   const [chaptersOpen, setChaptersOpen] = useState(false);
 
+  const [user, setUser] = useState(null);
+  const [loadingMarkers, setLoadingMarkers] = useState(true);
+
   const chapters = VIDEO_CHAPTERS[videoId] || [];
 
   const activeChapter = getActiveChapter(chapters, currentTime);
 
-  // --------------------------------------------------
-  // Load saved markers
-  // --------------------------------------------------
+  /*
+   * =========================================================
+   * AUTH
+   * =========================================================
+   */
 
   useEffect(() => {
-    try {
-      const saved = JSON.parse(
-        localStorage.getItem(STORAGE_KEY) || "[]"
-      );
+    let mounted = true;
 
-      setMarkers(
-        saved.filter((marker) => marker.videoId === videoId)
-      );
-    } catch {
-      setMarkers([]);
+    async function loadUser() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (mounted) {
+        setUser(user || null);
+      }
     }
-  }, [videoId]);
 
-  // --------------------------------------------------
-  // Save markers
-  // --------------------------------------------------
+    loadUser();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (mounted) {
+        setUser(session?.user || null);
+      }
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  /*
+   * =========================================================
+   * LOAD MARKERS FROM SUPABASE
+   * =========================================================
+   */
 
   useEffect(() => {
-    try {
-      const all = JSON.parse(
-        localStorage.getItem(STORAGE_KEY) || "[]"
-      );
+    let cancelled = false;
 
-      const otherVideos = all.filter(
-        (marker) => marker.videoId !== videoId
-      );
+    async function loadMarkers() {
+      setLoadingMarkers(true);
 
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify([
-          ...otherVideos,
-          ...markers,
-        ])
-      );
-    } catch {
-      // Ignore storage errors
+      if (!user) {
+        setMarkers([]);
+        setLoadingMarkers(false);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("study_markers")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("video_id", videoId)
+        .order("time", { ascending: true });
+
+      if (cancelled) return;
+
+      if (error) {
+        console.error("Failed to load study markers:", error);
+        setMarkers([]);
+      } else {
+        setMarkers(
+          (data || []).map((marker) => ({
+            id: marker.id,
+            videoId: marker.video_id,
+            type: marker.type,
+            time: Number(marker.time || 0),
+            text: marker.text || "",
+            createdAt: marker.created_at,
+          }))
+        );
+      }
+
+      setLoadingMarkers(false);
     }
-  }, [markers, videoId]);
 
-  // --------------------------------------------------
-  // YouTube player
-  // --------------------------------------------------
+    loadMarkers();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user, videoId]);
+
+  /*
+   * =========================================================
+   * MIGRATE OLD LOCAL MARKERS
+   *
+   * This runs once for the current browser.
+   * If you previously bookmarked things on this PC,
+   * they will be uploaded to your account.
+   * =========================================================
+   */
+
+  useEffect(() => {
+    if (!user) return;
+
+    async function migrateOldMarkers() {
+      const migrationKey = `jee-tube-markers-migrated-${user.id}`;
+
+      if (localStorage.getItem(migrationKey)) {
+        return;
+      }
+
+      try {
+        const oldData = JSON.parse(
+          localStorage.getItem("jee-tube-study-markers") || "[]"
+        );
+
+        if (!Array.isArray(oldData) || oldData.length === 0) {
+          localStorage.setItem(migrationKey, "true");
+          return;
+        }
+
+        const rows = oldData.map((marker) => ({
+          id: marker.id || crypto.randomUUID(),
+          user_id: user.id,
+          video_id: marker.videoId,
+          type: marker.type,
+          time: Number(marker.time || 0),
+          text: marker.text || "",
+          created_at: marker.createdAt || new Date().toISOString(),
+        }));
+
+        const { error } = await supabase
+          .from("study_markers")
+          .upsert(rows, {
+            onConflict: "id",
+          });
+
+        if (error) {
+          console.error(
+            "Old marker migration failed:",
+            error
+          );
+          return;
+        }
+
+        localStorage.setItem(migrationKey, "true");
+
+        /*
+         * Reload the current video's markers after migration.
+         */
+        if (videoId) {
+          const { data, error: reloadError } = await supabase
+            .from("study_markers")
+            .select("*")
+            .eq("user_id", user.id)
+            .eq("video_id", videoId)
+            .order("time", { ascending: true });
+
+          if (!reloadError) {
+            setMarkers(
+              (data || []).map((marker) => ({
+                id: marker.id,
+                videoId: marker.video_id,
+                type: marker.type,
+                time: Number(marker.time || 0),
+                text: marker.text || "",
+                createdAt: marker.created_at,
+              }))
+            );
+          }
+        }
+
+        /*
+         * Remove the old local copy after successful migration.
+         */
+        localStorage.removeItem("jee-tube-study-markers");
+      } catch (error) {
+        console.error(
+          "Marker migration error:",
+          error
+        );
+      }
+    }
+
+    migrateOldMarkers();
+  }, [user, videoId]);
+
+  /*
+   * =========================================================
+   * YOUTUBE PLAYER
+   * =========================================================
+   */
 
   useEffect(() => {
     let cancelled = false;
@@ -159,7 +311,7 @@ export default function Player() {
             );
           }
         } catch {
-          // Player not ready
+          // Player not ready.
         }
       }, 500);
     }
@@ -224,16 +376,18 @@ export default function Player() {
       try {
         playerRef.current?.destroy();
       } catch {
-        // Ignore
+        // Ignore.
       }
 
       playerRef.current = null;
     };
   }, [videoId]);
 
-  // --------------------------------------------------
-  // Current timestamp
-  // --------------------------------------------------
+  /*
+   * =========================================================
+   * CURRENT TIMESTAMP
+   * =========================================================
+   */
 
   function getCurrentTimestamp() {
     try {
@@ -246,51 +400,104 @@ export default function Player() {
         return time;
       }
     } catch {
-      // fallback
+      // Fallback.
     }
 
     return currentTime;
   }
 
-  // --------------------------------------------------
-  // Add marker
-  // --------------------------------------------------
+  /*
+   * =========================================================
+   * ADD MARKER
+   * =========================================================
+   */
 
-  function addMarker(type) {
-    const timestamp =
-      getCurrentTimestamp();
+  async function addMarker(type) {
+    if (!user) {
+      alert("Please sign in to save your study points.");
+      navigate("/login");
+      return;
+    }
+
+    const timestamp = getCurrentTimestamp();
 
     const marker = {
       id: crypto.randomUUID(),
       videoId,
       type,
       time: timestamp,
-      createdAt:
-        new Date().toISOString(),
+      createdAt: new Date().toISOString(),
       text: "",
     };
 
-    setMarkers((previous) => [
-      ...previous,
-      marker,
-    ]);
+    /*
+     * Optimistic UI update.
+     */
+    setMarkers((previous) =>
+      [...previous, marker].sort(
+        (a, b) => a.time - b.time
+      )
+    );
+
+    const { error } = await supabase
+      .from("study_markers")
+      .insert({
+        id: marker.id,
+        user_id: user.id,
+        video_id: videoId,
+        type: marker.type,
+        time: marker.time,
+        text: marker.text,
+        created_at: marker.createdAt,
+      });
+
+    if (error) {
+      console.error(
+        "Failed to save study marker:",
+        error
+      );
+
+      /*
+       * Roll back optimistic update.
+       */
+      setMarkers((previous) =>
+        previous.filter(
+          (item) => item.id !== marker.id
+        )
+      );
+
+      alert("Could not save this study point.");
+    }
   }
 
-  // --------------------------------------------------
-  // Notes
-  // --------------------------------------------------
+  /*
+   * =========================================================
+   * NOTES
+   * =========================================================
+   */
 
   function openNote() {
+    if (!user) {
+      alert("Please sign in to save notes.");
+      navigate("/login");
+      return;
+    }
+
     getCurrentTimestamp();
     setNoteText("");
     setNoteOpen(true);
   }
 
-  function saveNote() {
+  async function saveNote() {
     if (!noteText.trim()) return;
 
-    const timestamp =
-      getCurrentTimestamp();
+    if (!user) {
+      alert("Please sign in to save notes.");
+      navigate("/login");
+      return;
+    }
+
+    const timestamp = getCurrentTimestamp();
 
     const marker = {
       id: crypto.randomUUID(),
@@ -298,22 +505,51 @@ export default function Player() {
       type: "note",
       time: timestamp,
       text: noteText.trim(),
-      createdAt:
-        new Date().toISOString(),
+      createdAt: new Date().toISOString(),
     };
 
-    setMarkers((previous) => [
-      ...previous,
-      marker,
-    ]);
+    setMarkers((previous) =>
+      [...previous, marker].sort(
+        (a, b) => a.time - b.time
+      )
+    );
 
     setNoteOpen(false);
     setNoteText("");
+
+    const { error } = await supabase
+      .from("study_markers")
+      .insert({
+        id: marker.id,
+        user_id: user.id,
+        video_id: videoId,
+        type: "note",
+        time: marker.time,
+        text: marker.text,
+        created_at: marker.createdAt,
+      });
+
+    if (error) {
+      console.error(
+        "Failed to save note:",
+        error
+      );
+
+      setMarkers((previous) =>
+        previous.filter(
+          (item) => item.id !== marker.id
+        )
+      );
+
+      alert("Could not save your note.");
+    }
   }
 
-  // --------------------------------------------------
-  // Jump to marker
-  // --------------------------------------------------
+  /*
+   * =========================================================
+   * JUMP TO MARKER
+   * =========================================================
+   */
 
   function jumpToMarker(marker) {
     try {
@@ -324,13 +560,15 @@ export default function Player() {
 
       playerRef.current?.playVideo();
     } catch {
-      // Ignore
+      // Ignore.
     }
   }
 
-  // --------------------------------------------------
-  // Jump to chapter
-  // --------------------------------------------------
+  /*
+   * =========================================================
+   * JUMP TO CHAPTER
+   * =========================================================
+   */
 
   function jumpToChapter(chapter) {
     try {
@@ -344,20 +582,54 @@ export default function Player() {
       setCurrentTime(chapter.time);
       setChaptersOpen(false);
     } catch {
-      // Ignore
+      // Ignore.
     }
   }
 
-  // --------------------------------------------------
-  // Delete marker
-  // --------------------------------------------------
+  /*
+   * =========================================================
+   * DELETE MARKER
+   * =========================================================
+   */
 
-  function deleteMarker(id) {
+  async function deleteMarker(id) {
+    if (!user) return;
+
+    /*
+     * Keep old marker for rollback.
+     */
+    const oldMarker = markers.find(
+      (marker) => marker.id === id
+    );
+
     setMarkers((previous) =>
       previous.filter(
         (marker) => marker.id !== id
       )
     );
+
+    const { error } = await supabase
+      .from("study_markers")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", user.id);
+
+    if (error) {
+      console.error(
+        "Failed to delete marker:",
+        error
+      );
+
+      if (oldMarker) {
+        setMarkers((previous) =>
+          [...previous, oldMarker].sort(
+            (a, b) => a.time - b.time
+          )
+        );
+      }
+
+      alert("Could not delete this study point.");
+    }
   }
 
   const iconFor = {
@@ -403,14 +675,11 @@ export default function Player() {
 
               <button
                 className={`jt-chapters-button ${
-                  chaptersOpen
-                    ? "open"
-                    : ""
+                  chaptersOpen ? "open" : ""
                 }`}
                 onClick={() =>
                   setChaptersOpen(
-                    (previous) =>
-                      !previous
+                    (previous) => !previous
                   )
                 }
               >
@@ -423,9 +692,7 @@ export default function Player() {
                 </span>
 
                 <span className="jt-chapters-arrow">
-                  {chaptersOpen
-                    ? "▲"
-                    : "▼"}
+                  {chaptersOpen ? "▲" : "▼"}
                 </span>
               </button>
 
@@ -433,9 +700,7 @@ export default function Player() {
                 <div className="jt-chapters-dropdown">
 
                   <div className="jt-chapters-header">
-                    <strong>
-                      Chapters
-                    </strong>
+                    <strong>Chapters</strong>
 
                     <span>
                       {chapters.length}
@@ -443,47 +708,39 @@ export default function Player() {
                   </div>
 
                   <div className="jt-chapters-list">
-                    {chapters.map(
-                      (chapter) => {
-                        const isActive =
-                          activeChapter?.id ===
-                          chapter.id;
+                    {chapters.map((chapter) => {
+                      const isActive =
+                        activeChapter?.id ===
+                        chapter.id;
 
-                        return (
-                          <button
-                            key={chapter.id}
-                            className={`jt-chapter-item ${
-                              isActive
-                                ? "active"
-                                : ""
-                            }`}
-                            onClick={() =>
-                              jumpToChapter(
-                                chapter
-                              )
-                            }
-                          >
-                            <span className="jt-chapter-play">
-                              {isActive
-                                ? "▶"
-                                : ""}
-                            </span>
+                      return (
+                        <button
+                          key={chapter.id}
+                          className={`jt-chapter-item ${
+                            isActive ? "active" : ""
+                          }`}
+                          onClick={() =>
+                            jumpToChapter(
+                              chapter
+                            )
+                          }
+                        >
+                          <span className="jt-chapter-play">
+                            {isActive ? "▶" : ""}
+                          </span>
 
-                            <span className="jt-chapter-title">
-                              {
-                                chapter.title
-                              }
-                            </span>
+                          <span className="jt-chapter-title">
+                            {chapter.title}
+                          </span>
 
-                            <span className="jt-chapter-time">
-                              {formatTime(
-                                chapter.time
-                              )}
-                            </span>
-                          </button>
-                        );
-                      }
-                    )}
+                          <span className="jt-chapter-time">
+                            {formatTime(
+                              chapter.time
+                            )}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -500,10 +757,7 @@ export default function Player() {
               className="jt-study-action"
               title={`Save ${action.label} at current position`}
             >
-              <span>
-                {action.icon}
-              </span>
-
+              <span>{action.icon}</span>
               {action.label}
             </button>
           ))}
@@ -518,6 +772,31 @@ export default function Player() {
           </button>
         </div>
 
+        {/* Sign-in hint */}
+        {!user && (
+          <div className="jt-login-hint">
+            <span>🔐</span>
+
+            <span>
+              Sign in to save bookmarks, notes and
+              study points across all your devices.
+            </span>
+
+            <button
+              onClick={() => navigate("/login")}
+            >
+              Sign in
+            </button>
+          </div>
+        )}
+
+        {/* Loading */}
+        {loadingMarkers && user && (
+          <div className="jt-markers-loading">
+            Loading your study points...
+          </div>
+        )}
+
         {/* Note box */}
         {noteOpen && (
           <div className="jt-note-box">
@@ -525,9 +804,7 @@ export default function Player() {
             <div className="jt-note-header">
               <strong>
                 Note at{" "}
-                {formatTime(
-                  currentTime
-                )}
+                {formatTime(currentTime)}
               </strong>
 
               <button
@@ -544,9 +821,7 @@ export default function Player() {
               autoFocus
               value={noteText}
               onChange={(e) =>
-                setNoteText(
-                  e.target.value
-                )
+                setNoteText(e.target.value)
               }
               placeholder="Write your note..."
               className="jt-note-textarea"
@@ -577,15 +852,20 @@ export default function Player() {
         {/* Study points */}
         <section className="jt-markers-section">
 
-          <h2>
-            My Study Points
-          </h2>
+          <h2>My Study Points</h2>
 
-          {markers.length === 0 ? (
+          {!user ? (
             <div className="jt-markers-empty">
-              Pause the lecture and save a
-              bookmark, important point,
-              doubt, formula or concept.
+              Sign in to see your saved study points.
+            </div>
+          ) : loadingMarkers ? (
+            <div className="jt-markers-empty">
+              Loading your study points...
+            </div>
+          ) : markers.length === 0 ? (
+            <div className="jt-markers-empty">
+              Pause the lecture and save a bookmark,
+              important point, doubt, formula or concept.
             </div>
           ) : (
             <div className="jt-markers">
@@ -603,18 +883,12 @@ export default function Player() {
 
                     <button
                       onClick={() =>
-                        jumpToMarker(
-                          marker
-                        )
+                        jumpToMarker(marker)
                       }
                       className="jt-marker-main"
                     >
                       <span className="jt-marker-icon">
-                        {
-                          iconFor[
-                            marker.type
-                          ]
-                        }
+                        {iconFor[marker.type]}
                       </span>
 
                       <span>
@@ -630,9 +904,7 @@ export default function Player() {
 
                         {marker.text && (
                           <span className="jt-marker-text">
-                            {
-                              marker.text
-                            }
+                            {marker.text}
                           </span>
                         )}
                       </span>
