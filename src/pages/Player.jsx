@@ -4,6 +4,12 @@ import Layout from "../components/layout/Layout";
 import { supabase } from "../lib/supabase";
 import "../styles/player.css";
 
+/*
+ * =========================================================
+ * STUDY ACTIONS
+ * =========================================================
+ */
+
 const ACTIONS = [
   { type: "bookmark", icon: "🔖", label: "Bookmark" },
   { type: "important", icon: "⭐", label: "Important" },
@@ -16,10 +22,6 @@ const ACTIONS = [
  * =========================================================
  * FALLBACK CHAPTER DATA
  * =========================================================
- *
- * If videos.chapters contains data, that will be used first.
- * These chapters are only a fallback for videos that don't
- * have chapters stored in Supabase.
  */
 
 const VIDEO_CHAPTERS = {
@@ -107,18 +109,20 @@ function normalizeChapters(chapters) {
   return chapters
     .map((chapter, index) => ({
       id:
-        chapter.id ||
-        chapter.chapter_id ||
+        chapter?.id ||
+        chapter?.chapter_id ||
         `chapter-${index + 1}`,
+
       time: Number(
-        chapter.time ??
-          chapter.start_time ??
-          chapter.timestamp ??
+        chapter?.time ??
+          chapter?.start_time ??
+          chapter?.timestamp ??
           0
       ),
+
       title:
-        chapter.title ||
-        chapter.name ||
+        chapter?.title ||
+        chapter?.name ||
         `Chapter ${index + 1}`,
     }))
     .filter(
@@ -144,7 +148,9 @@ export default function Player() {
   const progressSaveRef = useRef(null);
 
   /*
-   * Database video
+   * =========================================================
+   * VIDEO
+   * =========================================================
    */
 
   const [video, setVideo] = useState(null);
@@ -152,7 +158,9 @@ export default function Player() {
   const [videoError, setVideoError] = useState("");
 
   /*
-   * Player
+   * =========================================================
+   * PLAYER STATE
+   * =========================================================
    */
 
   const [currentTime, setCurrentTime] = useState(0);
@@ -160,30 +168,54 @@ export default function Player() {
   const [resumeTime, setResumeTime] = useState(0);
 
   /*
-   * Study markers
+   * =========================================================
+   * MARKERS
+   * =========================================================
    */
 
   const [markers, setMarkers] = useState([]);
   const [loadingMarkers, setLoadingMarkers] = useState(true);
 
   /*
-   * Notes
+   * =========================================================
+   * NOTES
+   * =========================================================
    */
 
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteText, setNoteText] = useState("");
 
   /*
-   * Chapters
+   * =========================================================
+   * CHAPTERS
+   * =========================================================
    */
 
   const [chaptersOpen, setChaptersOpen] = useState(false);
 
   /*
-   * Auth
+   * =========================================================
+   * AUTH
+   * =========================================================
    */
 
   const [user, setUser] = useState(null);
+
+  /*
+   * =========================================================
+   * DERIVED VIDEO IDS
+   * =========================================================
+   *
+   * databaseVideoId:
+   *     videos.id
+   *
+   * youtubeId:
+   *     videos.youtube_id
+   */
+
+  const databaseVideoId = video?.id ?? null;
+  const youtubeId = video?.youtube_id || "";
+  const validYouTubeId = isValidYouTubeId(youtubeId);
 
   /*
    * =========================================================
@@ -224,8 +256,16 @@ export default function Player() {
 
   /*
    * =========================================================
-   * LOAD VIDEO FROM SUPABASE
+   * LOAD VIDEO
    * =========================================================
+   *
+   * PRIMARY:
+   *     /player/672
+   *     -> videos.id = 672
+   *
+   * FALLBACK:
+   *     /player/zOdUhsMydtM
+   *     -> videos.youtube_id = zOdUhsMydtM
    */
 
   useEffect(() => {
@@ -237,6 +277,7 @@ export default function Player() {
       setVideo(null);
       setCurrentTime(0);
       setResumeTime(0);
+      setPlayerError(false);
 
       if (!routeVideoId) {
         setVideoError("No video ID was provided.");
@@ -244,19 +285,47 @@ export default function Player() {
         return;
       }
 
+      let data = null;
+      let error = null;
+
       /*
-       * Route example:
-       *
-       * /player/zOdUhsMydtM
-       *
-       * The route contains youtube_id.
+       * -------------------------------------------------------
+       * FIRST: DATABASE ID
+       * -------------------------------------------------------
        */
 
-      const { data, error } = await supabase
-        .from("videos")
-        .select("*")
-        .eq("youtube_id", routeVideoId)
-        .maybeSingle();
+      const numericId = Number(routeVideoId);
+
+      if (
+        Number.isInteger(numericId) &&
+        numericId > 0
+      ) {
+        const result = await supabase
+          .from("videos")
+          .select("*")
+          .eq("id", numericId)
+          .maybeSingle();
+
+        data = result.data;
+        error = result.error;
+      }
+
+      /*
+       * -------------------------------------------------------
+       * SECOND: YOUTUBE ID FALLBACK
+       * -------------------------------------------------------
+       */
+
+      if (!data && !error) {
+        const result = await supabase
+          .from("videos")
+          .select("*")
+          .eq("youtube_id", routeVideoId)
+          .maybeSingle();
+
+        data = result.data;
+        error = result.error;
+      }
 
       if (cancelled) return;
 
@@ -283,9 +352,15 @@ export default function Player() {
         return;
       }
 
+      /*
+       * -------------------------------------------------------
+       * VALIDATE YOUTUBE ID
+       * -------------------------------------------------------
+       */
+
       if (!isValidYouTubeId(data.youtube_id)) {
         console.error(
-          "Invalid youtube_id:",
+          "Invalid youtube_id in database:",
           data.youtube_id
         );
 
@@ -296,6 +371,12 @@ export default function Player() {
         setLoadingVideo(false);
         return;
       }
+
+      console.log("JEE-Tube video loaded:", {
+        databaseId: data.id,
+        youtubeId: data.youtube_id,
+        title: data.title,
+      });
 
       setVideo(data);
       setLoadingVideo(false);
@@ -310,24 +391,13 @@ export default function Player() {
 
   /*
    * =========================================================
-   * ACTUAL YOUTUBE ID
-   * =========================================================
-   */
-
-  const youtubeId = video?.youtube_id || "";
-
-  const validYouTubeId =
-    isValidYouTubeId(youtubeId);
-
-  /*
-   * =========================================================
-   * VIDEO CHAPTERS
+   * CHAPTERS
    * =========================================================
    *
    * Priority:
    *
    * 1. videos.chapters
-   * 2. hard-coded fallback
+   * 2. fallback chapters
    */
 
   const chapters = useMemo(() => {
@@ -351,20 +421,17 @@ export default function Player() {
    * LOAD WATCH PROGRESS
    * =========================================================
    *
-   * Supabase:
+   * IMPORTANT:
    *
-   * watch_progress
-   * - user_id
-   * - video_id
-   * - current_time_seconds
-   * - completed
+   * watch_progress.video_id
+   * references videos.id.
    */
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadWatchProgress() {
-      if (!user || !validYouTubeId) {
+      if (!user || !databaseVideoId) {
         setResumeTime(0);
         return;
       }
@@ -375,7 +442,7 @@ export default function Player() {
           "current_time_seconds, completed"
         )
         .eq("user_id", user.id)
-        .eq("video_id", youtubeId)
+        .eq("video_id", databaseVideoId)
         .maybeSingle();
 
       if (cancelled) return;
@@ -408,16 +475,17 @@ export default function Player() {
     return () => {
       cancelled = true;
     };
-  }, [
-    user,
-    youtubeId,
-    validYouTubeId,
-  ]);
+  }, [user, databaseVideoId]);
 
   /*
    * =========================================================
    * LOAD STUDY MARKERS
    * =========================================================
+   *
+   * IMPORTANT:
+   *
+   * Your current study_markers setup uses the YouTube ID.
+   * Therefore this intentionally uses youtubeId.
    */
 
   useEffect(() => {
@@ -471,11 +539,7 @@ export default function Player() {
     return () => {
       cancelled = true;
     };
-  }, [
-    user,
-    youtubeId,
-    validYouTubeId,
-  ]);
+  }, [user, youtubeId, validYouTubeId]);
 
   /*
    * =========================================================
@@ -484,16 +548,14 @@ export default function Player() {
    */
 
   async function saveWatchProgress(time) {
-    if (!user || !validYouTubeId) return;
+    if (!user || !databaseVideoId) {
+      return;
+    }
 
     const seconds = Math.max(
       0,
       Math.floor(Number(time) || 0)
     );
-
-    /*
-     * Don't create lots of database requests.
-     */
 
     if (progressSaveRef.current) {
       clearTimeout(progressSaveRef.current);
@@ -506,13 +568,12 @@ export default function Player() {
           .upsert(
             {
               user_id: user.id,
-              video_id: youtubeId,
+              video_id: databaseVideoId,
               current_time_seconds: seconds,
               completed: false,
             },
             {
-              onConflict:
-                "user_id,video_id",
+              onConflict: "user_id,video_id",
             }
           );
 
@@ -525,6 +586,39 @@ export default function Player() {
       },
       800
     );
+  }
+
+  /*
+   * =========================================================
+   * SAVE COMPLETED VIDEO
+   * =========================================================
+   */
+
+  async function saveCompletedProgress() {
+    if (!user || !databaseVideoId) {
+      return;
+    }
+
+    const { error } = await supabase
+      .from("watch_progress")
+      .upsert(
+        {
+          user_id: user.id,
+          video_id: databaseVideoId,
+          current_time_seconds: 0,
+          completed: true,
+        },
+        {
+          onConflict: "user_id,video_id",
+        }
+      );
+
+    if (error) {
+      console.error(
+        "Failed to save completed status:",
+        error
+      );
+    }
   }
 
   /*
@@ -555,19 +649,14 @@ export default function Player() {
         try {
           if (
             playerRef.current &&
-            typeof playerRef.current
-              .getCurrentTime === "function"
+            typeof playerRef.current.getCurrentTime ===
+              "function"
           ) {
             const time =
               playerRef.current.getCurrentTime();
 
             if (Number.isFinite(time)) {
               setCurrentTime(time);
-
-              /*
-               * Save progress periodically.
-               */
-
               saveWatchProgress(time);
             }
           }
@@ -593,83 +682,84 @@ export default function Player() {
         // Ignore.
       }
 
-      playerRef.current =
-        new window.YT.Player(
-          "jee-tube-player",
-          {
-            videoId: youtubeId,
+      playerRef.current = new window.YT.Player(
+        "jee-tube-player",
+        {
+          videoId: youtubeId,
 
-            playerVars: {
-              autoplay: 0,
-              controls: 1,
-              rel: 0,
-              modestbranding: 1,
-              playsinline: 1,
-            },
+          playerVars: {
+            autoplay: 0,
+            controls: 1,
+            rel: 0,
+            modestbranding: 1,
+            playsinline: 1,
+          },
 
-            events: {
-              onReady: (event) => {
-                startTimeTracking();
+          events: {
+            onReady: (event) => {
+              startTimeTracking();
 
-                /*
-                 * Resume from previous position.
-                 */
+              /*
+               * Resume previous position.
+               */
 
-                if (resumeTime > 5) {
-                  event.target.seekTo(
-                    resumeTime,
-                    true
-                  );
-
-                  setCurrentTime(
-                    resumeTime
-                  );
-                }
-              },
-
-              onStateChange: (event) => {
-                /*
-                 * YouTube:
-                 *
-                 * 0 = ended
-                 * 1 = playing
-                 * 2 = paused
-                 */
-
-                if (event.data === 0) {
-                  saveCompletedProgress();
-                }
-
-                if (
-                  event.data === 1 ||
-                  event.data === 2
-                ) {
-                  try {
-                    const time =
-                      event.target.getCurrentTime();
-
-                    setCurrentTime(time);
-                    saveWatchProgress(
-                      time
-                    );
-                  } catch {
-                    // Ignore.
-                  }
-                }
-              },
-
-              onError: (event) => {
-                console.error(
-                  "YouTube player error:",
-                  event.data
+              if (resumeTime > 5) {
+                event.target.seekTo(
+                  resumeTime,
+                  true
                 );
 
-                setPlayerError(true);
-              },
+                setCurrentTime(
+                  resumeTime
+                );
+              }
             },
-          }
-        );
+
+            onStateChange: (event) => {
+              /*
+               * 0 = ended
+               * 1 = playing
+               * 2 = paused
+               */
+
+              if (event.data === 0) {
+                saveCompletedProgress();
+              }
+
+              if (
+                event.data === 1 ||
+                event.data === 2
+              ) {
+                try {
+                  const time =
+                    event.target.getCurrentTime();
+
+                  if (Number.isFinite(time)) {
+                    setCurrentTime(time);
+                    saveWatchProgress(time);
+                  }
+                } catch {
+                  // Ignore.
+                }
+              }
+            },
+
+            onError: (event) => {
+              console.error(
+                "YouTube player error:",
+                event.data
+              );
+
+              setPlayerError(true);
+            },
+          },
+        }
+      );
     }
+
+    /*
+     * YouTube API already loaded.
+     */
 
     if (
       window.YT &&
@@ -677,17 +767,20 @@ export default function Player() {
     ) {
       createPlayer();
     } else {
+      /*
+       * YouTube API not loaded yet.
+       */
+
       const previousCallback =
         window.onYouTubeIframeAPIReady;
 
-      window.onYouTubeIframeAPIReady =
-        () => {
-          previousCallback?.();
+      window.onYouTubeIframeAPIReady = () => {
+        previousCallback?.();
 
-          if (!cancelled) {
-            createPlayer();
-          }
-        };
+        if (!cancelled) {
+          createPlayer();
+        }
+      };
 
       if (
         !document.getElementById(
@@ -705,9 +798,7 @@ export default function Player() {
 
         script.async = true;
 
-        document.body.appendChild(
-          script
-        );
+        document.body.appendChild(script);
       }
     }
 
@@ -742,40 +833,6 @@ export default function Player() {
 
   /*
    * =========================================================
-   * SAVE COMPLETED VIDEO
-   * =========================================================
-   */
-
-  async function saveCompletedProgress() {
-    if (!user || !validYouTubeId) {
-      return;
-    }
-
-    const { error } = await supabase
-      .from("watch_progress")
-      .upsert(
-        {
-          user_id: user.id,
-          video_id: youtubeId,
-          current_time_seconds: 0,
-          completed: true,
-        },
-        {
-          onConflict:
-            "user_id,video_id",
-        }
-      );
-
-    if (error) {
-      console.error(
-        "Failed to save completed status:",
-        error
-      );
-    }
-  }
-
-  /*
-   * =========================================================
    * CURRENT TIME
    * =========================================================
    */
@@ -784,8 +841,8 @@ export default function Player() {
     try {
       if (
         playerRef.current &&
-        typeof playerRef.current
-          .getCurrentTime === "function"
+        typeof playerRef.current.getCurrentTime ===
+          "function"
       ) {
         const time =
           playerRef.current.getCurrentTime();
@@ -837,7 +894,7 @@ export default function Player() {
     };
 
     /*
-     * Optimistic UI
+     * Optimistic UI.
      */
 
     setMarkers((previous) =>
@@ -845,13 +902,6 @@ export default function Player() {
         (a, b) => a.time - b.time
       )
     );
-
-    /*
-     * IMPORTANT:
-     *
-     * study_markers.video_id is TEXT,
-     * so we intentionally save youtubeId.
-     */
 
     const { error } = await supabase
       .from("study_markers")
@@ -1091,7 +1141,7 @@ export default function Player() {
 
   /*
    * =========================================================
-   * LOADING VIDEO
+   * LOADING
    * =========================================================
    */
 
@@ -1100,9 +1150,7 @@ export default function Player() {
       <Layout>
         <main className="jt-player-page">
           <button
-            onClick={() =>
-              navigate(-1)
-            }
+            onClick={() => navigate(-1)}
             className="jt-player-back"
           >
             ← Back
@@ -1118,7 +1166,7 @@ export default function Player() {
 
   /*
    * =========================================================
-   * VIDEO DATABASE ERROR
+   * DATABASE ERROR
    * =========================================================
    */
 
@@ -1127,9 +1175,7 @@ export default function Player() {
       <Layout>
         <main className="jt-player-page">
           <button
-            onClick={() =>
-              navigate(-1)
-            }
+            onClick={() => navigate(-1)}
             className="jt-player-back"
           >
             ← Back
@@ -1179,9 +1225,7 @@ export default function Player() {
       <div className="jt-player-page">
 
         <button
-          onClick={() =>
-            navigate(-1)
-          }
+          onClick={() => navigate(-1)}
           className="jt-player-back"
         >
           ← Back
@@ -1209,7 +1253,8 @@ export default function Player() {
             </p>
 
             <small>
-              YouTube ID: {youtubeId}
+              YouTube ID:{" "}
+              {youtubeId}
             </small>
 
             <button
@@ -1270,7 +1315,9 @@ export default function Player() {
           </strong>
 
           {resumeTime > 5 &&
-            currentTime === resumeTime && (
+            Math.abs(
+              currentTime - resumeTime
+            ) < 1 && (
               <span className="jt-resume-label">
                 Resumed from{" "}
                 {formatTime(resumeTime)}
@@ -1527,8 +1574,7 @@ export default function Player() {
               Loading your study
               points...
             </div>
-          ) : markers.length ===
-            0 ? (
+          ) : markers.length === 0 ? (
             <div className="jt-markers-empty">
               Pause the lecture
               and save a bookmark,
