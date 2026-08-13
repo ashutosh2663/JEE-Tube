@@ -1,28 +1,21 @@
-import Sidebar from "./Sidebar";
+import React, { useState } from "react";
 import Navbar from "./Navbar";
+import Sidebar from "./Sidebar";
 
 export default function Layout({ children }) {
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
   return (
-    <div
-      style={{
-        display: "flex",
-        background: "#0B0B0B",
-      }}
-    >
-      <Sidebar />
+    <div className="jt-app">
+      <Navbar onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
 
-      <main
-        style={{
-          marginLeft: "260px",
-          width: "100%",
-          minHeight: "100vh",
-          padding: "25px 35px",
-        }}
-      >
-        <Navbar />
+      <div className="jt-body">
+        <Sidebar open={sidebarOpen} />
 
-        {children}
-      </main>
+        <main className={`jt-main ${sidebarOpen ? "" : "sidebar-collapsed"}`}>
+          {children}
+        </main>
+      </div>
     </div>
   );
 }

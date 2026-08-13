@@ -3,6 +3,7 @@ import { createBrowserRouter } from "react-router-dom";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 import Home from "./pages/Home";
+import Settings from "./pages/Settings";
 import Physics from "./pages/Physics";
 import Chemistry from "./pages/Chemistry";
 import Maths from "./pages/Maths";
@@ -10,15 +11,14 @@ import Search from "./pages/Search";
 import Player from "./pages/Player";
 import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
+import Admin from "./pages/Admin";
 
 const router = createBrowserRouter([
-  // Public route
   {
     path: "/login",
     element: <Login />,
   },
 
-  // Everything inside here requires authentication
   {
     element: <ProtectedRoute />,
     children: [
@@ -49,6 +49,14 @@ const router = createBrowserRouter([
       {
         path: "/dashboard",
         element: <Dashboard />,
+      },
+      {
+        path: "/settings",
+        element: <Settings />,
+      },
+      {
+        path: "/admin",
+        element: <Admin />,
       },
     ],
   },

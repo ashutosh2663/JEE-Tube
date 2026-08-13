@@ -1,0 +1,116 @@
+.settings-page {
+  min-height: 100vh;
+  padding: 40px;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 42px;
+}
+
+.settings-header-icon {
+  width: 58px;
+  height: 58px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #1d1d1d;
+  border: 1px solid #303030;
+}
+
+.settings-header h1 {
+  margin: 0 0 6px;
+  font-size: 32px;
+}
+
+.settings-header p {
+  margin: 0;
+  color: #999;
+}
+
+.settings-section {
+  margin-bottom: 35px;
+}
+
+.settings-section h2 {
+  font-size: 14px;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 0 0 12px 4px;
+}
+
+.settings-card,
+.admin-panel-card {
+  width: 100%;
+  min-height: 82px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 18px 20px;
+  background: #151515;
+  color: white;
+  border: 1px solid #292929;
+  border-radius: 16px;
+  text-align: left;
+  transition: 0.2s ease;
+}
+
+.settings-card:hover,
+.admin-panel-card:hover {
+  background: #1d1d1d;
+  border-color: #3a3a3a;
+  transform: translateY(-2px);
+}
+
+.settings-card-icon,
+.admin-panel-icon {
+  width: 46px;
+  height: 46px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #222;
+}
+
+.admin-panel-icon {
+  background: rgba(229, 9, 20, 0.12);
+  color: #e50914;
+}
+
+.settings-card-content {
+  flex: 1;
+}
+
+.settings-card-content h3 {
+  margin: 0 0 5px;
+  font-size: 16px;
+}
+
+.settings-card-content p {
+  margin: 0;
+  color: #999;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.admin-panel-card {
+  cursor: pointer;
+}
+
+@media (max-width: 700px) {
+  .settings-page {
+    padding: 25px 18px;
+  }
+
+  .settings-header h1 {
+    font-size: 25px;
+  }
+}

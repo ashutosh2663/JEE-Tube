@@ -1,16 +1,48 @@
-*{
-    margin:0;
-    padding:0;
-    box-sizing:border-box;
+:root {
+  color-scheme: dark;
 }
 
-body{
-    background:#0B0B0B;
-    color:white;
-    font-family:Inter,Arial,sans-serif;
+* {
+  box-sizing: border-box;
 }
 
-a{
-    text-decoration:none;
-    color:inherit;
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background: #080808;
+  color: #fff;
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid #e50914;
+  outline-offset: 2px;
+}
+
+img {
+  max-width: 100%;
+  display: block;
 }

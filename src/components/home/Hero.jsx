@@ -1,100 +1,50 @@
-import { motion } from "framer-motion";
+import React from "react";
+import { Play, Info } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 export default function Hero() {
-  return (
-    <motion.section
-      initial={{ opacity: 0, y: 40 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.8 }}
-      style={{
-        minHeight: "80vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: "60px",
-        borderRadius: "20px",
-        background:
-          "linear-gradient(135deg, #111111 0%, #1a1a1a 45%, #2b0d0d 100%)",
-        overflow: "hidden",
-      }}
-    >
-      <div style={{ maxWidth: "650px" }}>
-        <p
-          style={{
-            color: "#E50914",
-            fontWeight: "700",
-            letterSpacing: "3px",
-            marginBottom: "20px",
-          }}
-        >
-          PREMIUM JEE LEARNING PLATFORM
-        </p>
+  const navigate = useNavigate();
 
-        <h1
-          style={{
-            fontSize: "72px",
-            fontWeight: "900",
-            lineHeight: "1.1",
-            marginBottom: "25px",
-          }}
-        >
-          JEE Tube
+  return (
+    <section className="hero">
+      <div className="hero-background">
+        <div className="hero-glow" />
+      </div>
+
+      <div className="hero-content">
+        <div className="hero-badge">
+          🔥 JEE PREPARATION
+        </div>
+
+        <h1>
+          Master JEE.
+          <br />
+          One Lecture At A Time.
         </h1>
 
-        <p
-          style={{
-            color: "#bdbdbd",
-            fontSize: "22px",
-            lineHeight: "1.7",
-            marginBottom: "40px",
-          }}
-        >
-          Learn Physics, Chemistry and Mathematics with the best lectures,
-          organized in one distraction-free experience.
+        <p>
+          Discover lectures, revision sessions, PYQs and complete
+          chapter-wise preparation in one place.
         </p>
 
-        <div style={{ display: "flex", gap: "20px" }}>
+        <div className="hero-actions">
           <button
-            style={{
-              background: "#E50914",
-              color: "white",
-              border: "none",
-              padding: "16px 34px",
-              borderRadius: "12px",
-              fontWeight: "700",
-              cursor: "pointer",
-              fontSize: "18px",
-            }}
+            className="hero-primary"
+            onClick={() => navigate("/explore")}
           >
-            ▶ Start Learning
+            <Play size={20} fill="currentColor" />
+            Start Learning
           </button>
 
           <button
-            style={{
-              background: "transparent",
-              color: "white",
-              border: "1px solid #444",
-              padding: "16px 34px",
-              borderRadius: "12px",
-              cursor: "pointer",
-              fontSize: "18px",
-            }}
+            className="hero-secondary"
+            onClick={() => navigate("/subject/physics")}
           >
-            Browse Subjects
+            <Info size={20} />
+            Explore Subjects
           </button>
         </div>
       </div>
-
-      <div
-        style={{
-          width: "340px",
-          height: "340px",
-          borderRadius: "50%",
-          background:
-            "radial-gradient(circle,#E50914 0%,#7d0b10 55%,transparent 75%)",
-          filter: "blur(8px)",
-        }}
-      />
-    </motion.section>
+    </section>
   );
 }

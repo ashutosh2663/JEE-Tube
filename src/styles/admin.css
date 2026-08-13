@@ -1,0 +1,221 @@
+/* =========================================
+   JEE-TUBE ADMIN PANEL
+   ========================================= */
+
+.admin-page {
+  min-height: 100vh;
+  background: #080808;
+  color: #fff;
+  padding: 32px 40px 60px;
+}
+
+.admin-header {
+  max-width: 1400px;
+  margin: 0 auto 35px;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 25px;
+}
+
+.admin-kicker {
+  margin: 0 0 6px;
+
+  color: #e50914;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 2px;
+}
+
+.admin-header h1 {
+  margin: 0;
+
+  font-size: clamp(32px, 4vw, 48px);
+  line-height: 1.1;
+}
+
+.admin-header p {
+  margin: 10px 0 0;
+  color: #999;
+}
+
+.admin-home-btn {
+  display: inline-flex;
+  align-items: center;
+
+  padding: 12px 18px;
+
+  border: 1px solid #2c2c2c;
+  border-radius: 10px;
+
+  color: #fff;
+  background: #151515;
+
+  text-decoration: none;
+
+  transition:
+    background 0.2s ease,
+    transform 0.2s ease;
+}
+
+.admin-home-btn:hover {
+  background: #222;
+  transform: translateY(-2px);
+}
+
+/* =========================================
+   CONTENT
+   ========================================= */
+
+.admin-content {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* =========================================
+   STATS
+   ========================================= */
+
+.admin-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+
+  margin-bottom: 25px;
+}
+
+.admin-stat-card {
+  padding: 22px;
+
+  background: linear-gradient(145deg, #171717, #111);
+  border: 1px solid #292929;
+  border-radius: 16px;
+
+  transition:
+    transform 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.admin-stat-card:hover {
+  transform: translateY(-3px);
+  border-color: #444;
+}
+
+.admin-stat-card span {
+  display: block;
+
+  color: #999;
+  font-size: 14px;
+  margin-bottom: 10px;
+}
+
+.admin-stat-card strong {
+  display: block;
+
+  font-size: 32px;
+}
+
+/* =========================================
+   MAIN PANEL
+   ========================================= */
+
+.admin-panel {
+  overflow: hidden;
+
+  background: #111;
+  border: 1px solid #292929;
+  border-radius: 18px;
+}
+
+.admin-panel-header {
+  padding: 25px;
+
+  border-bottom: 1px solid #292929;
+}
+
+.admin-panel-header h2 {
+  margin: 0 0 7px;
+  font-size: 24px;
+}
+
+.admin-panel-header p {
+  margin: 0;
+  color: #888;
+}
+
+/* =========================================
+   EMPTY STATE
+   ========================================= */
+
+.admin-empty {
+  min-height: 360px;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+
+  padding: 40px;
+
+  text-align: center;
+}
+
+.admin-empty-icon {
+  width: 70px;
+  height: 70px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  margin-bottom: 18px;
+
+  border-radius: 18px;
+  background: #1d1d1d;
+
+  font-size: 30px;
+}
+
+.admin-empty h3 {
+  margin: 0 0 8px;
+  font-size: 21px;
+}
+
+.admin-empty p {
+  max-width: 500px;
+
+  margin: 0;
+
+  color: #888;
+  line-height: 1.6;
+}
+
+/* =========================================
+   RESPONSIVE
+   ========================================= */
+
+@media (max-width: 900px) {
+  .admin-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .admin-page {
+    padding: 25px 20px 50px;
+  }
+}
+
+@media (max-width: 600px) {
+  .admin-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .admin-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-panel-header {
+    padding: 20px;
+  }
+}

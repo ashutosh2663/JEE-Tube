@@ -1,49 +1,104 @@
-.sidebar{
-width:260px;
-height:100vh;
-position:fixed;
-left:0;
-top:0;
-background:#121212;
-border-right:1px solid #222;
-padding:30px 20px;
-display:flex;
-flex-direction:column;
+.jt-body {
+  display: flex;
 }
 
-.logo{
-font-size:34px;
-font-weight:900;
-margin-bottom:45px;
+.jt-sidebar {
+  position: fixed;
+  top: 64px;
+  bottom: 0;
+  left: 0;
+  width: 235px;
+  padding: 16px 12px;
+  background: #080808;
+  border-right: 1px solid #202020;
+  overflow-y: auto;
+  transition: width 0.25s ease;
+  z-index: 50;
 }
 
-.logo span{
-color:#E50914;
+.jt-sidebar.closed {
+  width: 0;
+  padding: 0;
+  overflow: hidden;
 }
 
-.menu{
-display:flex;
-flex-direction:column;
-gap:10px;
+.sidebar-section {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
-.menu-item{
-display:flex;
-align-items:center;
-gap:15px;
-padding:15px;
-border-radius:12px;
-color:#bdbdbd;
-transition:.25s;
-font-weight:600;
+.sidebar-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #aaa;
+  text-align: left;
+  cursor: pointer;
+  font-size: 14px;
 }
 
-.menu-item:hover{
-background:#222;
-color:white;
+.sidebar-item:hover {
+  background: #181818;
+  color: white;
 }
 
-.menu-item.active{
-background:#E50914;
-color:white;
+.sidebar-item.active {
+  background: #242424;
+  color: white;
+}
+
+.sidebar-item.active svg {
+  color: #e50914;
+}
+
+.sidebar-divider {
+  height: 1px;
+  background: #242424;
+  margin: 16px 5px;
+}
+
+.sidebar-title {
+  color: #666;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  padding: 0 14px 8px;
+}
+
+.sidebar-footer {
+  margin: 30px 10px;
+  color: #555;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.sidebar-footer strong {
+  color: #777;
+}
+
+.jt-main {
+  flex: 1;
+  min-width: 0;
+  margin-left: 235px;
+  transition: margin-left 0.25s ease;
+}
+
+.jt-main.sidebar-collapsed {
+  margin-left: 0;
+}
+
+@media (max-width: 800px) {
+  .jt-sidebar {
+    width: 210px;
+  }
+
+  .jt-main {
+    margin-left: 0;
+  }
 }

@@ -1,85 +1,71 @@
+import React from "react";
+import { Play } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
-import VideoCard from "../search/VideoCard";
+export default function SubjectRow({
+  title,
+  videos = [],
+  viewAllPath,
+}) {
+  const navigate = useNavigate();
 
-export default function SubjectRow({ title, videos = [], loading = false }) {
+  if (!videos.length) return null;
+
   return (
-    <section style={styles.section}>
-      <div style={styles.header}>
-        <h2 style={styles.title}>{title}</h2>
+    <section className="subject-section">
+      <div className="subject-heading">
+        <div>
+          <h2>{title}</h2>
+          <p>Continue your preparation</p>
+        </div>
 
-        {videos.length > 0 && (
-          <button style={styles.seeAll}>
-            See all →
-          </button>
-        )}
+        <button
+          className="view-all"
+          onClick={() => viewAllPath && navigate(viewAllPath)}
+        >
+          View all →
+        </button>
       </div>
 
-      {loading ? (
-        <div className="subject-row-loading">
-          <div className="loading-card" />
-          <div className="loading-card" />
-          <div className="loading-card" />
-          <div className="loading-card" />
-        </div>
-      ) : videos.length === 0 ? (
-        <div style={styles.empty}>
-          No videos found for this section.
-        </div>
-      ) : (
-        <div className="subject-row">
-          {videos.map((video, index) => {
-            const videoId =
-              video?.id?.videoId ||
-              video?.id ||
-              video?.videoId;
+      <div className="video-row">
+        {videos.map((video, index) => (
+          <article
+            className="video-card"
+            key={video.id || index}
+            onClick={() =>
+              video.id && navigate(`/player/${video.id}`)
+            }
+          >
+            <div className="thumbnail">
+              <img
+                src={video.thumbnail}
+                alt={video.title}
+                loading="lazy"
+              />
 
-            if (!videoId) return null;
-
-            return (
-              <div
-                className="subject-row-card"
-                key={`${videoId}-${index}`}
-              >
-                <VideoCard video={video} />
+              <div className="play-overlay">
+                <Play size={22} fill="currentColor" />
               </div>
-            );
-          })}
-        </div>
-      )}
+
+              {video.duration && (
+                <span className="duration">
+                  {video.duration}
+                </span>
+              )}
+            </div>
+
+            <div className="video-info">
+              <h3>{video.title}</h3>
+
+              <p>
+                {video.teacher || "JEE Tube"}
+                {" • "}
+                {video.chapter || "JEE Preparation"}
+              </p>
+            </div>
+          </article>
+        ))}
+      </div>
     </section>
   );
 }
-
-const styles = {
-  section: {
-    marginTop: "32px",
-    width: "100%",
-  },
-
-  header: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: "14px",
-  },
-
-  title: {
-    margin: 0,
-    fontSize: "22px",
-    fontWeight: 700,
-    color: "#fff",
-  },
-
-  seeAll: {
-    background: "transparent",
-    border: "none",
-    color: "#999",
-    cursor: "pointer",
-    fontSize: "13px",
-  },
-
-  empty: {
-    color: "#777",
-    padding: "20px 0",
-  },
-};
