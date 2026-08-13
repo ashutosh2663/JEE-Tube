@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import Layout from "../components/layout/Layout";
 import { supabase } from "../lib/supabase";
 import "../styles/player.css";
@@ -13,9 +13,15 @@ const ACTIONS = [
 ];
 
 /*
- * Sequence & Series chapter data.
- * These timestamps came from your extracted YouTube description.
+ * =========================================================
+ * FALLBACK CHAPTER DATA
+ * =========================================================
+ *
+ * If videos.chapters contains data, that will be used first.
+ * These chapters are only a fallback for videos that don't
+ * have chapters stored in Supabase.
  */
+
 const VIDEO_CHAPTERS = {
   zOdUhsMydtM: [
     { id: "chapter-1", time: 0, title: "Introduction" },
@@ -52,8 +58,14 @@ const VIDEO_CHAPTERS = {
   ],
 };
 
+/*
+ * =========================================================
+ * HELPERS
+ * =========================================================
+ */
+
 function formatTime(seconds) {
-  const s = Math.floor(seconds || 0);
+  const s = Math.floor(Number(seconds) || 0);
 
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
@@ -85,27 +97,93 @@ function getActiveChapter(chapters, currentTime) {
   return active;
 }
 
+function isValidYouTubeId(id) {
+  return /^[a-zA-Z0-9_-]{11}$/.test(id || "");
+}
+
+function normalizeChapters(chapters) {
+  if (!Array.isArray(chapters)) return [];
+
+  return chapters
+    .map((chapter, index) => ({
+      id:
+        chapter.id ||
+        chapter.chapter_id ||
+        `chapter-${index + 1}`,
+      time: Number(
+        chapter.time ??
+          chapter.start_time ??
+          chapter.timestamp ??
+          0
+      ),
+      title:
+        chapter.title ||
+        chapter.name ||
+        `Chapter ${index + 1}`,
+    }))
+    .filter(
+      (chapter) =>
+        Number.isFinite(chapter.time) &&
+        chapter.time >= 0
+    )
+    .sort((a, b) => a.time - b.time);
+}
+
+/*
+ * =========================================================
+ * PLAYER
+ * =========================================================
+ */
+
 export default function Player() {
-  const { videoId } = useParams();
+  const { videoId: routeVideoId } = useParams();
   const navigate = useNavigate();
 
   const playerRef = useRef(null);
   const intervalRef = useRef(null);
+  const progressSaveRef = useRef(null);
+
+  /*
+   * Database video
+   */
+
+  const [video, setVideo] = useState(null);
+  const [loadingVideo, setLoadingVideo] = useState(true);
+  const [videoError, setVideoError] = useState("");
+
+  /*
+   * Player
+   */
 
   const [currentTime, setCurrentTime] = useState(0);
+  const [playerError, setPlayerError] = useState(false);
+  const [resumeTime, setResumeTime] = useState(0);
+
+  /*
+   * Study markers
+   */
+
   const [markers, setMarkers] = useState([]);
+  const [loadingMarkers, setLoadingMarkers] = useState(true);
+
+  /*
+   * Notes
+   */
 
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteText, setNoteText] = useState("");
 
+  /*
+   * Chapters
+   */
+
   const [chaptersOpen, setChaptersOpen] = useState(false);
 
+  /*
+   * Auth
+   */
+
   const [user, setUser] = useState(null);
-  const [loadingMarkers, setLoadingMarkers] = useState(true);
-
-  const chapters = VIDEO_CHAPTERS[videoId] || [];
-
-  const activeChapter = getActiveChapter(chapters, currentTime);
 
   /*
    * =========================================================
@@ -130,11 +208,13 @@ export default function Player() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (mounted) {
-        setUser(session?.user || null);
+    } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        if (mounted) {
+          setUser(session?.user || null);
+        }
       }
-    });
+    );
 
     return () => {
       mounted = false;
@@ -144,7 +224,199 @@ export default function Player() {
 
   /*
    * =========================================================
-   * LOAD MARKERS FROM SUPABASE
+   * LOAD VIDEO FROM SUPABASE
+   * =========================================================
+   */
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadVideo() {
+      setLoadingVideo(true);
+      setVideoError("");
+      setVideo(null);
+      setCurrentTime(0);
+      setResumeTime(0);
+
+      if (!routeVideoId) {
+        setVideoError("No video ID was provided.");
+        setLoadingVideo(false);
+        return;
+      }
+
+      /*
+       * Route example:
+       *
+       * /player/zOdUhsMydtM
+       *
+       * The route contains youtube_id.
+       */
+
+      const { data, error } = await supabase
+        .from("videos")
+        .select("*")
+        .eq("youtube_id", routeVideoId)
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      if (error) {
+        console.error(
+          "Failed to load video:",
+          error
+        );
+
+        setVideoError(
+          "Could not load this video from the database."
+        );
+
+        setLoadingVideo(false);
+        return;
+      }
+
+      if (!data) {
+        setVideoError(
+          "This video could not be found in the JEE-Tube database."
+        );
+
+        setLoadingVideo(false);
+        return;
+      }
+
+      if (!isValidYouTubeId(data.youtube_id)) {
+        console.error(
+          "Invalid youtube_id:",
+          data.youtube_id
+        );
+
+        setVideoError(
+          "This video has an invalid YouTube ID in the database."
+        );
+
+        setLoadingVideo(false);
+        return;
+      }
+
+      setVideo(data);
+      setLoadingVideo(false);
+    }
+
+    loadVideo();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [routeVideoId]);
+
+  /*
+   * =========================================================
+   * ACTUAL YOUTUBE ID
+   * =========================================================
+   */
+
+  const youtubeId = video?.youtube_id || "";
+
+  const validYouTubeId =
+    isValidYouTubeId(youtubeId);
+
+  /*
+   * =========================================================
+   * VIDEO CHAPTERS
+   * =========================================================
+   *
+   * Priority:
+   *
+   * 1. videos.chapters
+   * 2. hard-coded fallback
+   */
+
+  const chapters = useMemo(() => {
+    const databaseChapters =
+      normalizeChapters(video?.chapters);
+
+    if (databaseChapters.length > 0) {
+      return databaseChapters;
+    }
+
+    return VIDEO_CHAPTERS[youtubeId] || [];
+  }, [video, youtubeId]);
+
+  const activeChapter = getActiveChapter(
+    chapters,
+    currentTime
+  );
+
+  /*
+   * =========================================================
+   * LOAD WATCH PROGRESS
+   * =========================================================
+   *
+   * Supabase:
+   *
+   * watch_progress
+   * - user_id
+   * - video_id
+   * - current_time_seconds
+   * - completed
+   */
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadWatchProgress() {
+      if (!user || !validYouTubeId) {
+        setResumeTime(0);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("watch_progress")
+        .select(
+          "current_time_seconds, completed"
+        )
+        .eq("user_id", user.id)
+        .eq("video_id", youtubeId)
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      if (error) {
+        console.error(
+          "Failed to load watch progress:",
+          error
+        );
+
+        setResumeTime(0);
+        return;
+      }
+
+      if (data) {
+        const savedTime = Number(
+          data.current_time_seconds || 0
+        );
+
+        setResumeTime(
+          data.completed ? 0 : savedTime
+        );
+      } else {
+        setResumeTime(0);
+      }
+    }
+
+    loadWatchProgress();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    user,
+    youtubeId,
+    validYouTubeId,
+  ]);
+
+  /*
+   * =========================================================
+   * LOAD STUDY MARKERS
    * =========================================================
    */
 
@@ -154,7 +426,7 @@ export default function Player() {
     async function loadMarkers() {
       setLoadingMarkers(true);
 
-      if (!user) {
+      if (!user || !validYouTubeId) {
         setMarkers([]);
         setLoadingMarkers(false);
         return;
@@ -164,13 +436,19 @@ export default function Player() {
         .from("study_markers")
         .select("*")
         .eq("user_id", user.id)
-        .eq("video_id", videoId)
-        .order("time", { ascending: true });
+        .eq("video_id", youtubeId)
+        .order("time", {
+          ascending: true,
+        });
 
       if (cancelled) return;
 
       if (error) {
-        console.error("Failed to load study markers:", error);
+        console.error(
+          "Failed to load study markers:",
+          error
+        );
+
         setMarkers([]);
       } else {
         setMarkers(
@@ -193,103 +471,61 @@ export default function Player() {
     return () => {
       cancelled = true;
     };
-  }, [user, videoId]);
+  }, [
+    user,
+    youtubeId,
+    validYouTubeId,
+  ]);
 
   /*
    * =========================================================
-   * MIGRATE OLD LOCAL MARKERS
-   *
-   * This runs once for the current browser.
-   * If you previously bookmarked things on this PC,
-   * they will be uploaded to your account.
+   * SAVE WATCH PROGRESS
    * =========================================================
    */
 
-  useEffect(() => {
-    if (!user) return;
+  async function saveWatchProgress(time) {
+    if (!user || !validYouTubeId) return;
 
-    async function migrateOldMarkers() {
-      const migrationKey = `jee-tube-markers-migrated-${user.id}`;
+    const seconds = Math.max(
+      0,
+      Math.floor(Number(time) || 0)
+    );
 
-      if (localStorage.getItem(migrationKey)) {
-        return;
-      }
+    /*
+     * Don't create lots of database requests.
+     */
 
-      try {
-        const oldData = JSON.parse(
-          localStorage.getItem("jee-tube-study-markers") || "[]"
-        );
+    if (progressSaveRef.current) {
+      clearTimeout(progressSaveRef.current);
+    }
 
-        if (!Array.isArray(oldData) || oldData.length === 0) {
-          localStorage.setItem(migrationKey, "true");
-          return;
-        }
-
-        const rows = oldData.map((marker) => ({
-          id: marker.id || crypto.randomUUID(),
-          user_id: user.id,
-          video_id: marker.videoId,
-          type: marker.type,
-          time: Number(marker.time || 0),
-          text: marker.text || "",
-          created_at: marker.createdAt || new Date().toISOString(),
-        }));
-
+    progressSaveRef.current = setTimeout(
+      async () => {
         const { error } = await supabase
-          .from("study_markers")
-          .upsert(rows, {
-            onConflict: "id",
-          });
+          .from("watch_progress")
+          .upsert(
+            {
+              user_id: user.id,
+              video_id: youtubeId,
+              current_time_seconds: seconds,
+              completed: false,
+            },
+            {
+              onConflict:
+                "user_id,video_id",
+            }
+          );
 
         if (error) {
           console.error(
-            "Old marker migration failed:",
+            "Failed to save watch progress:",
             error
           );
-          return;
         }
-
-        localStorage.setItem(migrationKey, "true");
-
-        /*
-         * Reload the current video's markers after migration.
-         */
-        if (videoId) {
-          const { data, error: reloadError } = await supabase
-            .from("study_markers")
-            .select("*")
-            .eq("user_id", user.id)
-            .eq("video_id", videoId)
-            .order("time", { ascending: true });
-
-          if (!reloadError) {
-            setMarkers(
-              (data || []).map((marker) => ({
-                id: marker.id,
-                videoId: marker.video_id,
-                type: marker.type,
-                time: Number(marker.time || 0),
-                text: marker.text || "",
-                createdAt: marker.created_at,
-              }))
-            );
-          }
-        }
-
-        /*
-         * Remove the old local copy after successful migration.
-         */
-        localStorage.removeItem("jee-tube-study-markers");
-      } catch (error) {
-        console.error(
-          "Marker migration error:",
-          error
-        );
-      }
-    }
-
-    migrateOldMarkers();
-  }, [user, videoId]);
+      },
+      800
+    );
+  }
 
   /*
    * =========================================================
@@ -300,57 +536,158 @@ export default function Player() {
   useEffect(() => {
     let cancelled = false;
 
+    clearInterval(intervalRef.current);
+
+    if (
+      loadingVideo ||
+      !video ||
+      !validYouTubeId
+    ) {
+      return;
+    }
+
+    setPlayerError(false);
+
     function startTimeTracking() {
       clearInterval(intervalRef.current);
 
       intervalRef.current = setInterval(() => {
         try {
-          if (playerRef.current?.getCurrentTime) {
-            setCurrentTime(
-              playerRef.current.getCurrentTime()
-            );
+          if (
+            playerRef.current &&
+            typeof playerRef.current
+              .getCurrentTime === "function"
+          ) {
+            const time =
+              playerRef.current.getCurrentTime();
+
+            if (Number.isFinite(time)) {
+              setCurrentTime(time);
+
+              /*
+               * Save progress periodically.
+               */
+
+              saveWatchProgress(time);
+            }
           }
         } catch {
           // Player not ready.
         }
-      }, 500);
+      }, 5000);
     }
 
     function createPlayer() {
       if (
         cancelled ||
         !window.YT ||
-        !window.YT.Player
+        !window.YT.Player ||
+        !validYouTubeId
       ) {
         return;
       }
 
-      playerRef.current = new window.YT.Player(
-        "jee-tube-player",
-        {
-          videoId,
+      try {
+        playerRef.current?.destroy();
+      } catch {
+        // Ignore.
+      }
 
-          playerVars: {
-            autoplay: 0,
-            controls: 1,
-            rel: 0,
-            modestbranding: 1,
-            playsinline: 1,
-          },
+      playerRef.current =
+        new window.YT.Player(
+          "jee-tube-player",
+          {
+            videoId: youtubeId,
 
-          events: {
-            onReady: () => {
-              startTimeTracking();
+            playerVars: {
+              autoplay: 0,
+              controls: 1,
+              rel: 0,
+              modestbranding: 1,
+              playsinline: 1,
             },
-          },
-        }
-      );
+
+            events: {
+              onReady: (event) => {
+                startTimeTracking();
+
+                /*
+                 * Resume from previous position.
+                 */
+
+                if (resumeTime > 5) {
+                  event.target.seekTo(
+                    resumeTime,
+                    true
+                  );
+
+                  setCurrentTime(
+                    resumeTime
+                  );
+                }
+              },
+
+              onStateChange: (event) => {
+                /*
+                 * YouTube:
+                 *
+                 * 0 = ended
+                 * 1 = playing
+                 * 2 = paused
+                 */
+
+                if (event.data === 0) {
+                  saveCompletedProgress();
+                }
+
+                if (
+                  event.data === 1 ||
+                  event.data === 2
+                ) {
+                  try {
+                    const time =
+                      event.target.getCurrentTime();
+
+                    setCurrentTime(time);
+                    saveWatchProgress(
+                      time
+                    );
+                  } catch {
+                    // Ignore.
+                  }
+                }
+              },
+
+              onError: (event) => {
+                console.error(
+                  "YouTube player error:",
+                  event.data
+                );
+
+                setPlayerError(true);
+              },
+            },
+          }
+        );
     }
 
-    if (window.YT && window.YT.Player) {
+    if (
+      window.YT &&
+      window.YT.Player
+    ) {
       createPlayer();
     } else {
-      window.onYouTubeIframeAPIReady = createPlayer;
+      const previousCallback =
+        window.onYouTubeIframeAPIReady;
+
+      window.onYouTubeIframeAPIReady =
+        () => {
+          previousCallback?.();
+
+          if (!cancelled) {
+            createPlayer();
+          }
+        };
 
       if (
         !document.getElementById(
@@ -360,18 +697,32 @@ export default function Player() {
         const script =
           document.createElement("script");
 
-        script.id = "youtube-iframe-api";
+        script.id =
+          "youtube-iframe-api";
+
         script.src =
           "https://www.youtube.com/iframe_api";
 
-        document.body.appendChild(script);
+        script.async = true;
+
+        document.body.appendChild(
+          script
+        );
       }
     }
 
     return () => {
       cancelled = true;
 
-      clearInterval(intervalRef.current);
+      clearInterval(
+        intervalRef.current
+      );
+
+      if (progressSaveRef.current) {
+        clearTimeout(
+          progressSaveRef.current
+        );
+      }
 
       try {
         playerRef.current?.destroy();
@@ -381,23 +732,68 @@ export default function Player() {
 
       playerRef.current = null;
     };
-  }, [videoId]);
+  }, [
+    video,
+    youtubeId,
+    validYouTubeId,
+    loadingVideo,
+    resumeTime,
+  ]);
 
   /*
    * =========================================================
-   * CURRENT TIMESTAMP
+   * SAVE COMPLETED VIDEO
+   * =========================================================
+   */
+
+  async function saveCompletedProgress() {
+    if (!user || !validYouTubeId) {
+      return;
+    }
+
+    const { error } = await supabase
+      .from("watch_progress")
+      .upsert(
+        {
+          user_id: user.id,
+          video_id: youtubeId,
+          current_time_seconds: 0,
+          completed: true,
+        },
+        {
+          onConflict:
+            "user_id,video_id",
+        }
+      );
+
+    if (error) {
+      console.error(
+        "Failed to save completed status:",
+        error
+      );
+    }
+  }
+
+  /*
+   * =========================================================
+   * CURRENT TIME
    * =========================================================
    */
 
   function getCurrentTimestamp() {
     try {
-      if (playerRef.current?.getCurrentTime) {
+      if (
+        playerRef.current &&
+        typeof playerRef.current
+          .getCurrentTime === "function"
+      ) {
         const time =
           playerRef.current.getCurrentTime();
 
-        setCurrentTime(time);
-
-        return time;
+        if (Number.isFinite(time)) {
+          setCurrentTime(time);
+          return time;
+        }
       }
     } catch {
       // Fallback.
@@ -408,65 +804,83 @@ export default function Player() {
 
   /*
    * =========================================================
-   * ADD MARKER
+   * ADD STUDY MARKER
    * =========================================================
    */
 
   async function addMarker(type) {
     if (!user) {
-      alert("Please sign in to save your study points.");
+      alert(
+        "Please sign in to save your study points."
+      );
+
       navigate("/login");
       return;
     }
 
-    const timestamp = getCurrentTimestamp();
+    if (!validYouTubeId) {
+      alert("Invalid YouTube video.");
+      return;
+    }
+
+    const timestamp =
+      getCurrentTimestamp();
 
     const marker = {
       id: crypto.randomUUID(),
-      videoId,
+      videoId: youtubeId,
       type,
       time: timestamp,
-      createdAt: new Date().toISOString(),
+      createdAt:
+        new Date().toISOString(),
       text: "",
     };
 
     /*
-     * Optimistic UI update.
+     * Optimistic UI
      */
+
     setMarkers((previous) =>
       [...previous, marker].sort(
         (a, b) => a.time - b.time
       )
     );
 
+    /*
+     * IMPORTANT:
+     *
+     * study_markers.video_id is TEXT,
+     * so we intentionally save youtubeId.
+     */
+
     const { error } = await supabase
       .from("study_markers")
       .insert({
         id: marker.id,
         user_id: user.id,
-        video_id: videoId,
+        video_id: youtubeId,
         type: marker.type,
-        time: marker.time,
+        time: Math.floor(marker.time),
         text: marker.text,
         created_at: marker.createdAt,
       });
 
     if (error) {
       console.error(
-        "Failed to save study marker:",
+        "Failed to save marker:",
         error
       );
 
-      /*
-       * Roll back optimistic update.
-       */
       setMarkers((previous) =>
         previous.filter(
-          (item) => item.id !== marker.id
+          (item) =>
+            item.id !== marker.id
         )
       );
 
-      alert("Could not save this study point.");
+      alert(
+        "Could not save this study point."
+      );
     }
   }
 
@@ -478,12 +892,16 @@ export default function Player() {
 
   function openNote() {
     if (!user) {
-      alert("Please sign in to save notes.");
+      alert(
+        "Please sign in to save notes."
+      );
+
       navigate("/login");
       return;
     }
 
     getCurrentTimestamp();
+
     setNoteText("");
     setNoteOpen(true);
   }
@@ -492,20 +910,25 @@ export default function Player() {
     if (!noteText.trim()) return;
 
     if (!user) {
-      alert("Please sign in to save notes.");
+      alert(
+        "Please sign in to save notes."
+      );
+
       navigate("/login");
       return;
     }
 
-    const timestamp = getCurrentTimestamp();
+    const timestamp =
+      getCurrentTimestamp();
 
     const marker = {
       id: crypto.randomUUID(),
-      videoId,
+      videoId: youtubeId,
       type: "note",
       time: timestamp,
       text: noteText.trim(),
-      createdAt: new Date().toISOString(),
+      createdAt:
+        new Date().toISOString(),
     };
 
     setMarkers((previous) =>
@@ -522,9 +945,9 @@ export default function Player() {
       .insert({
         id: marker.id,
         user_id: user.id,
-        video_id: videoId,
+        video_id: youtubeId,
         type: "note",
-        time: marker.time,
+        time: Math.floor(timestamp),
         text: marker.text,
         created_at: marker.createdAt,
       });
@@ -537,11 +960,14 @@ export default function Player() {
 
       setMarkers((previous) =>
         previous.filter(
-          (item) => item.id !== marker.id
+          (item) =>
+            item.id !== marker.id
         )
       );
 
-      alert("Could not save your note.");
+      alert(
+        "Could not save your note."
+      );
     }
   }
 
@@ -553,12 +979,18 @@ export default function Player() {
 
   function jumpToMarker(marker) {
     try {
-      playerRef.current?.seekTo(
-        marker.time,
-        true
-      );
+      if (
+        playerRef.current?.seekTo
+      ) {
+        playerRef.current.seekTo(
+          marker.time,
+          true
+        );
 
-      playerRef.current?.playVideo();
+        playerRef.current.playVideo?.();
+
+        setCurrentTime(marker.time);
+      }
     } catch {
       // Ignore.
     }
@@ -572,12 +1004,16 @@ export default function Player() {
 
   function jumpToChapter(chapter) {
     try {
-      playerRef.current?.seekTo(
-        chapter.time,
-        true
-      );
+      if (
+        playerRef.current?.seekTo
+      ) {
+        playerRef.current.seekTo(
+          chapter.time,
+          true
+        );
 
-      playerRef.current?.playVideo();
+        playerRef.current.playVideo?.();
+      }
 
       setCurrentTime(chapter.time);
       setChaptersOpen(false);
@@ -595,16 +1031,16 @@ export default function Player() {
   async function deleteMarker(id) {
     if (!user) return;
 
-    /*
-     * Keep old marker for rollback.
-     */
-    const oldMarker = markers.find(
-      (marker) => marker.id === id
-    );
+    const oldMarker =
+      markers.find(
+        (marker) =>
+          marker.id === id
+      );
 
     setMarkers((previous) =>
       previous.filter(
-        (marker) => marker.id !== id
+        (marker) =>
+          marker.id !== id
       )
     );
 
@@ -622,15 +1058,27 @@ export default function Player() {
 
       if (oldMarker) {
         setMarkers((previous) =>
-          [...previous, oldMarker].sort(
-            (a, b) => a.time - b.time
+          [
+            ...previous,
+            oldMarker,
+          ].sort(
+            (a, b) =>
+              a.time - b.time
           )
         );
       }
 
-      alert("Could not delete this study point.");
+      alert(
+        "Could not delete this study point."
+      );
     }
   }
+
+  /*
+   * =========================================================
+   * ICONS
+   * =========================================================
+   */
 
   const iconFor = {
     bookmark: "🔖",
@@ -641,45 +1089,214 @@ export default function Player() {
     note: "📝",
   };
 
+  /*
+   * =========================================================
+   * LOADING VIDEO
+   * =========================================================
+   */
+
+  if (loadingVideo) {
+    return (
+      <Layout>
+        <main className="jt-player-page">
+          <button
+            onClick={() =>
+              navigate(-1)
+            }
+            className="jt-player-back"
+          >
+            ← Back
+          </button>
+
+          <div className="jt-player-loading">
+            Loading video...
+          </div>
+        </main>
+      </Layout>
+    );
+  }
+
+  /*
+   * =========================================================
+   * VIDEO DATABASE ERROR
+   * =========================================================
+   */
+
+  if (videoError || !video) {
+    return (
+      <Layout>
+        <main className="jt-player-page">
+          <button
+            onClick={() =>
+              navigate(-1)
+            }
+            className="jt-player-back"
+          >
+            ← Back
+          </button>
+
+          <div className="jt-player-error">
+            <div className="jt-player-error-icon">
+              ⚠️
+            </div>
+
+            <h2>
+              Video unavailable
+            </h2>
+
+            <p>
+              {videoError ||
+                "This video could not be loaded."}
+            </p>
+
+            <small>
+              Requested ID:{" "}
+              {routeVideoId}
+            </small>
+
+            <button
+              onClick={() =>
+                navigate("/")
+              }
+              className="jt-player-error-button"
+            >
+              Go Home
+            </button>
+          </div>
+        </main>
+      </Layout>
+    );
+  }
+
+  /*
+   * =========================================================
+   * MAIN PLAYER
+   * =========================================================
+   */
+
   return (
     <Layout>
       <div className="jt-player-page">
 
-        {/* Back */}
         <button
-          onClick={() => navigate(-1)}
+          onClick={() =>
+            navigate(-1)
+          }
           className="jt-player-back"
         >
           ← Back
         </button>
 
-        {/* Player */}
+        {/* VIDEO */}
+
         <div className="jt-player-wrapper">
           <div id="jee-tube-player" />
         </div>
 
-        {/* Current position */}
+        {playerError && (
+          <div className="jt-player-error">
+            <div className="jt-player-error-icon">
+              ⚠️
+            </div>
+
+            <h2>
+              Unable to play this video
+            </h2>
+
+            <p>
+              YouTube could not play this
+              video.
+            </p>
+
+            <small>
+              YouTube ID: {youtubeId}
+            </small>
+
+            <button
+              onClick={() =>
+                window.location.reload()
+              }
+              className="jt-player-error-button"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {/* VIDEO INFORMATION */}
+
+        <section className="jt-video-info">
+          <h1>{video.title}</h1>
+
+          <div className="jt-video-meta">
+            {video.teacher && (
+              <span>
+                👨‍🏫 {video.teacher}
+              </span>
+            )}
+
+            {video.subject && (
+              <span>
+                📚 {video.subject}
+              </span>
+            )}
+
+            {video.chapter && (
+              <span>
+                📖 {video.chapter}
+              </span>
+            )}
+
+            {video.exam && (
+              <span>
+                🎯 {video.exam}
+              </span>
+            )}
+
+            {video.difficulty && (
+              <span>
+                ⚡ {video.difficulty}
+              </span>
+            )}
+          </div>
+        </section>
+
+        {/* CURRENT TIME */}
+
         <div className="jt-player-time">
           Current position:{" "}
           <strong>
             {formatTime(currentTime)}
           </strong>
+
+          {resumeTime > 5 &&
+            currentTime === resumeTime && (
+              <span className="jt-resume-label">
+                Resumed from{" "}
+                {formatTime(resumeTime)}
+              </span>
+            )}
         </div>
 
-        {/* Toolbar */}
+        {/* TOOLBAR */}
+
         <div className="jt-player-toolbar">
 
-          {/* CHAPTER DROPDOWN */}
+          {/* CHAPTERS */}
+
           {chapters.length > 0 && (
             <div className="jt-chapters">
 
               <button
                 className={`jt-chapters-button ${
-                  chaptersOpen ? "open" : ""
+                  chaptersOpen
+                    ? "open"
+                    : ""
                 }`}
                 onClick={() =>
                   setChaptersOpen(
-                    (previous) => !previous
+                    (previous) =>
+                      !previous
                   )
                 }
               >
@@ -692,7 +1309,9 @@ export default function Player() {
                 </span>
 
                 <span className="jt-chapters-arrow">
-                  {chaptersOpen ? "▲" : "▼"}
+                  {chaptersOpen
+                    ? "▲"
+                    : "▼"}
                 </span>
               </button>
 
@@ -700,7 +1319,9 @@ export default function Player() {
                 <div className="jt-chapters-dropdown">
 
                   <div className="jt-chapters-header">
-                    <strong>Chapters</strong>
+                    <strong>
+                      Chapters
+                    </strong>
 
                     <span>
                       {chapters.length}
@@ -708,61 +1329,82 @@ export default function Player() {
                   </div>
 
                   <div className="jt-chapters-list">
-                    {chapters.map((chapter) => {
-                      const isActive =
-                        activeChapter?.id ===
-                        chapter.id;
+                    {chapters.map(
+                      (chapter) => {
+                        const isActive =
+                          activeChapter?.id ===
+                          chapter.id;
 
-                      return (
-                        <button
-                          key={chapter.id}
-                          className={`jt-chapter-item ${
-                            isActive ? "active" : ""
-                          }`}
-                          onClick={() =>
-                            jumpToChapter(
-                              chapter
-                            )
-                          }
-                        >
-                          <span className="jt-chapter-play">
-                            {isActive ? "▶" : ""}
-                          </span>
+                        return (
+                          <button
+                            key={
+                              chapter.id
+                            }
+                            className={`jt-chapter-item ${
+                              isActive
+                                ? "active"
+                                : ""
+                            }`}
+                            onClick={() =>
+                              jumpToChapter(
+                                chapter
+                              )
+                            }
+                          >
+                            <span className="jt-chapter-play">
+                              {isActive
+                                ? "▶"
+                                : ""}
+                            </span>
 
-                          <span className="jt-chapter-title">
-                            {chapter.title}
-                          </span>
+                            <span className="jt-chapter-title">
+                              {
+                                chapter.title
+                              }
+                            </span>
 
-                          <span className="jt-chapter-time">
-                            {formatTime(
-                              chapter.time
-                            )}
-                          </span>
-                        </button>
-                      );
-                    })}
+                            <span className="jt-chapter-time">
+                              {formatTime(
+                                chapter.time
+                              )}
+                            </span>
+                          </button>
+                        );
+                      }
+                    )}
                   </div>
                 </div>
               )}
             </div>
           )}
 
-          {/* Study actions */}
-          {ACTIONS.map((action) => (
-            <button
-              key={action.type}
-              onClick={() =>
-                addMarker(action.type)
-              }
-              className="jt-study-action"
-              title={`Save ${action.label} at current position`}
-            >
-              <span>{action.icon}</span>
-              {action.label}
-            </button>
-          ))}
+          {/* STUDY ACTIONS */}
 
-          {/* Note */}
+          {ACTIONS.map(
+            (action) => (
+              <button
+                key={
+                  action.type
+                }
+                onClick={() =>
+                  addMarker(
+                    action.type
+                  )
+                }
+                className="jt-study-action"
+                title={`Save ${action.label} at current position`}
+              >
+                <span>
+                  {action.icon}
+                </span>
+
+                {action.label}
+              </button>
+            )
+          )}
+
+          {/* NOTE */}
+
           <button
             onClick={openNote}
             className="jt-study-action"
@@ -772,44 +1414,58 @@ export default function Player() {
           </button>
         </div>
 
-        {/* Sign-in hint */}
+        {/* LOGIN HINT */}
+
         {!user && (
           <div className="jt-login-hint">
             <span>🔐</span>
 
             <span>
-              Sign in to save bookmarks, notes and
-              study points across all your devices.
+              Sign in to save
+              bookmarks, notes
+              and study points
+              across all your
+              devices.
             </span>
 
             <button
-              onClick={() => navigate("/login")}
+              onClick={() =>
+                navigate("/login")
+              }
             >
               Sign in
             </button>
           </div>
         )}
 
-        {/* Loading */}
-        {loadingMarkers && user && (
-          <div className="jt-markers-loading">
-            Loading your study points...
-          </div>
-        )}
+        {/* MARKER LOADING */}
 
-        {/* Note box */}
+        {loadingMarkers &&
+          user && (
+            <div className="jt-markers-loading">
+              Loading your study
+              points...
+            </div>
+          )}
+
+        {/* NOTE BOX */}
+
         {noteOpen && (
           <div className="jt-note-box">
 
             <div className="jt-note-header">
               <strong>
                 Note at{" "}
-                {formatTime(currentTime)}
+                {formatTime(
+                  currentTime
+                )}
               </strong>
 
               <button
                 onClick={() =>
-                  setNoteOpen(false)
+                  setNoteOpen(
+                    false
+                  )
                 }
                 className="jt-note-close"
               >
@@ -821,7 +1477,9 @@ export default function Player() {
               autoFocus
               value={noteText}
               onChange={(e) =>
-                setNoteText(e.target.value)
+                setNoteText(
+                  e.target.value
+                )
               }
               placeholder="Write your note..."
               className="jt-note-textarea"
@@ -831,7 +1489,9 @@ export default function Player() {
 
               <button
                 onClick={() =>
-                  setNoteOpen(false)
+                  setNoteOpen(
+                    false
+                  )
                 }
                 className="jt-note-cancel"
               >
@@ -849,23 +1509,32 @@ export default function Player() {
           </div>
         )}
 
-        {/* Study points */}
+        {/* STUDY POINTS */}
+
         <section className="jt-markers-section">
 
-          <h2>My Study Points</h2>
+          <h2>
+            My Study Points
+          </h2>
 
           {!user ? (
             <div className="jt-markers-empty">
-              Sign in to see your saved study points.
+              Sign in to see your
+              saved study points.
             </div>
           ) : loadingMarkers ? (
             <div className="jt-markers-empty">
-              Loading your study points...
+              Loading your study
+              points...
             </div>
-          ) : markers.length === 0 ? (
+          ) : markers.length ===
+            0 ? (
             <div className="jt-markers-empty">
-              Pause the lecture and save a bookmark,
-              important point, doubt, formula or concept.
+              Pause the lecture
+              and save a bookmark,
+              important point,
+              doubt, formula or
+              concept.
             </div>
           ) : (
             <div className="jt-markers">
@@ -875,59 +1544,73 @@ export default function Player() {
                   (a, b) =>
                     a.time - b.time
                 )
-                .map((marker) => (
-                  <div
-                    key={marker.id}
-                    className="jt-marker"
-                  >
-
-                    <button
-                      onClick={() =>
-                        jumpToMarker(marker)
+                .map(
+                  (marker) => (
+                    <div
+                      key={
+                        marker.id
                       }
-                      className="jt-marker-main"
+                      className="jt-marker"
                     >
-                      <span className="jt-marker-icon">
-                        {iconFor[marker.type]}
-                      </span>
 
-                      <span>
-                        <strong>
-                          {formatTime(
-                            marker.time
-                          )}
-                        </strong>
-
-                        <span className="jt-marker-type">
-                          {marker.type}
+                      <button
+                        onClick={() =>
+                          jumpToMarker(
+                            marker
+                          )
+                        }
+                        className="jt-marker-main"
+                      >
+                        <span className="jt-marker-icon">
+                          {
+                            iconFor[
+                              marker.type
+                            ] ||
+                            "📍"
+                          }
                         </span>
 
-                        {marker.text && (
-                          <span className="jt-marker-text">
-                            {marker.text}
+                        <span>
+                          <strong>
+                            {formatTime(
+                              marker.time
+                            )}
+                          </strong>
+
+                          <span className="jt-marker-type">
+                            {
+                              marker.type
+                            }
                           </span>
-                        )}
-                      </span>
-                    </button>
 
-                    <button
-                      onClick={() =>
-                        deleteMarker(
-                          marker.id
-                        )
-                      }
-                      className="jt-marker-delete"
-                      title="Delete"
-                    >
-                      ×
-                    </button>
+                          {marker.text && (
+                            <span className="jt-marker-text">
+                              {
+                                marker.text
+                              }
+                            </span>
+                          )}
+                        </span>
+                      </button>
 
-                  </div>
-                ))}
+                      <button
+                        onClick={() =>
+                          deleteMarker(
+                            marker.id
+                          )
+                        }
+                        className="jt-marker-delete"
+                        title="Delete"
+                      >
+                        ×
+                      </button>
+
+                    </div>
+                  )
+                )}
             </div>
           )}
         </section>
-
       </div>
     </Layout>
   );
