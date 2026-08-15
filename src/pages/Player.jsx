@@ -1,3 +1,4 @@
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Layout from "../components/layout/Layout";
@@ -11,11 +12,31 @@ import "../styles/player.css";
  */
 
 const ACTIONS = [
-  { type: "bookmark", icon: "🔖", label: "Bookmark" },
-  { type: "important", icon: "⭐", label: "Important" },
-  { type: "doubt", icon: "❓", label: "Doubt" },
-  { type: "formula", icon: "🧮", label: "Formula" },
-  { type: "concept", icon: "🧠", label: "Concept" },
+  {
+    type: "bookmark",
+    icon: "🔖",
+    label: "Bookmark",
+  },
+  {
+    type: "important",
+    icon: "⭐",
+    label: "Important",
+  },
+  {
+    type: "doubt",
+    icon: "❓",
+    label: "Doubt",
+  },
+  {
+    type: "formula",
+    icon: "🧮",
+    label: "Formula",
+  },
+  {
+    type: "concept",
+    icon: "🧠",
+    label: "Concept",
+  },
 ];
 
 /*
@@ -26,37 +47,121 @@ const ACTIONS = [
 
 const VIDEO_CHAPTERS = {
   zOdUhsMydtM: [
-    { id: "chapter-1", time: 0, title: "Introduction" },
-    { id: "chapter-2", time: 96, title: "Topics to be covered" },
-    { id: "chapter-3", time: 285, title: "Arithmetic progression" },
-    { id: "chapter-4", time: 544, title: "Properties of AP" },
-    { id: "chapter-5", time: 6748, title: "Common term problems" },
-    { id: "chapter-6", time: 8204, title: "Geometric progression" },
-    { id: "chapter-7", time: 8334, title: "Properties of GP" },
-    { id: "chapter-8", time: 8675, title: "Important format for GP" },
-    { id: "chapter-9", time: 10151, title: "Special type GP problems" },
-    { id: "chapter-10", time: 12208, title: "Harmonic progression" },
-    { id: "chapter-11", time: 14542, title: "Means" },
-    { id: "chapter-12", time: 14834, title: "Inserting Means" },
-    { id: "chapter-13", time: 16770, title: "Important Concepts" },
+    {
+      id: "chapter-1",
+      time: 0,
+      title: "Introduction",
+    },
+    {
+      id: "chapter-2",
+      time: 96,
+      title: "Topics to be covered",
+    },
+    {
+      id: "chapter-3",
+      time: 285,
+      title: "Arithmetic progression",
+    },
+    {
+      id: "chapter-4",
+      time: 544,
+      title: "Properties of AP",
+    },
+    {
+      id: "chapter-5",
+      time: 6748,
+      title: "Common term problems",
+    },
+    {
+      id: "chapter-6",
+      time: 8204,
+      title: "Geometric progression",
+    },
+    {
+      id: "chapter-7",
+      time: 8334,
+      title: "Properties of GP",
+    },
+    {
+      id: "chapter-8",
+      time: 8675,
+      title: "Important format for GP",
+    },
+    {
+      id: "chapter-9",
+      time: 10151,
+      title: "Special type GP problems",
+    },
+    {
+      id: "chapter-10",
+      time: 12208,
+      title: "Harmonic progression",
+    },
+    {
+      id: "chapter-11",
+      time: 14542,
+      title: "Means",
+    },
+    {
+      id: "chapter-12",
+      time: 14834,
+      title: "Inserting Means",
+    },
+    {
+      id: "chapter-13",
+      time: 16770,
+      title: "Important Concepts",
+    },
     {
       id: "chapter-14",
       time: 17367,
       title: "Arithmetic geometric progression",
     },
-    { id: "chapter-15", time: 19184, title: "Properties of Sigma" },
-    { id: "chapter-16", time: 19557, title: "Formulas of Sigma" },
-    { id: "chapter-17", time: 20232, title: "Miscellaneous sequences" },
-    { id: "chapter-18", time: 21498, title: "Shortcut method for Tn" },
+    {
+      id: "chapter-15",
+      time: 19184,
+      title: "Properties of Sigma",
+    },
+    {
+      id: "chapter-16",
+      time: 19557,
+      title: "Formulas of Sigma",
+    },
+    {
+      id: "chapter-17",
+      time: 20232,
+      title: "Miscellaneous sequences",
+    },
+    {
+      id: "chapter-18",
+      time: 21498,
+      title: "Shortcut method for Tn",
+    },
     {
       id: "chapter-19",
       time: 22085,
       title: "Telescopic method of difference",
     },
-    { id: "chapter-20", time: 25390, title: "AM-GM-HM Inequality" },
-    { id: "chapter-21", time: 26457, title: "Exponential Series" },
-    { id: "chapter-22", time: 28412, title: "Logarithmic Series" },
-    { id: "chapter-23", time: 29195, title: "Thankyou bachhon" },
+    {
+      id: "chapter-20",
+      time: 25390,
+      title: "AM-GM-HM Inequality",
+    },
+    {
+      id: "chapter-21",
+      time: 26457,
+      title: "Exponential Series",
+    },
+    {
+      id: "chapter-22",
+      time: 28412,
+      title: "Logarithmic Series",
+    },
+    {
+      id: "chapter-23",
+      time: 29195,
+      title: "Thankyou bachhon",
+    },
   ],
 };
 
@@ -74,17 +179,18 @@ function formatTime(seconds) {
   const sec = s % 60;
 
   if (h > 0) {
-    return `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(
-      2,
-      "0"
-    )}`;
+    return `${h}:${String(m).padStart(2, "0")}:${String(
+      sec
+    ).padStart(2, "0")}`;
   }
 
   return `${m}:${String(sec).padStart(2, "0")}`;
 }
 
 function getActiveChapter(chapters, currentTime) {
-  if (!chapters.length) return null;
+  if (!chapters.length) {
+    return null;
+  }
 
   let active = chapters[0];
 
@@ -104,7 +210,9 @@ function isValidYouTubeId(id) {
 }
 
 function normalizeChapters(chapters) {
-  if (!Array.isArray(chapters)) return [];
+  if (!Array.isArray(chapters)) {
+    return [];
+  }
 
   return chapters
     .map((chapter, index) => ({
@@ -146,6 +254,9 @@ export default function Player() {
   const playerRef = useRef(null);
   const intervalRef = useRef(null);
   const progressSaveRef = useRef(null);
+  const latestTimeRef = useRef(0);
+  const userRef = useRef(null);
+  const databaseVideoIdRef = useRef(null);
 
   /*
    * =========================================================
@@ -204,18 +315,30 @@ export default function Player() {
   /*
    * =========================================================
    * DERIVED VIDEO IDS
-   * =========================================================
    *
    * databaseVideoId:
    *     videos.id
    *
    * youtubeId:
    *     videos.youtube_id
+   * =========================================================
    */
 
   const databaseVideoId = video?.id ?? null;
   const youtubeId = video?.youtube_id || "";
   const validYouTubeId = isValidYouTubeId(youtubeId);
+
+  /*
+   * Keep refs synchronized.
+   */
+
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+
+  useEffect(() => {
+    databaseVideoIdRef.current = databaseVideoId;
+  }, [databaseVideoId]);
 
   /*
    * =========================================================
@@ -227,12 +350,31 @@ export default function Player() {
     let mounted = true;
 
     async function loadUser() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      try {
+        const {
+          data: { user: currentUser },
+          error,
+        } = await supabase.auth.getUser();
 
-      if (mounted) {
-        setUser(user || null);
+        if (error) {
+          console.warn(
+            "Could not get current user:",
+            error.message
+          );
+        }
+
+        if (mounted) {
+          setUser(currentUser || null);
+        }
+      } catch (error) {
+        console.warn(
+          "Auth request failed:",
+          error
+        );
+
+        if (mounted) {
+          setUser(null);
+        }
       }
     }
 
@@ -242,22 +384,26 @@ export default function Player() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(
       (_event, session) => {
-        if (mounted) {
-          setUser(session?.user || null);
+        if (!mounted) {
+          return;
         }
+
+        const nextUser = session?.user || null;
+
+        setUser(nextUser);
+        userRef.current = nextUser;
       }
     );
 
     return () => {
       mounted = false;
-      subscription.unsubscribe();
+      subscription?.unsubscribe();
     };
   }, []);
 
   /*
    * =========================================================
    * LOAD VIDEO
-   * =========================================================
    *
    * PRIMARY:
    *     /player/672
@@ -266,6 +412,7 @@ export default function Player() {
    * FALLBACK:
    *     /player/zOdUhsMydtM
    *     -> videos.youtube_id = zOdUhsMydtM
+   * =========================================================
    */
 
   useEffect(() => {
@@ -279,8 +426,12 @@ export default function Player() {
       setResumeTime(0);
       setPlayerError(false);
 
+      latestTimeRef.current = 0;
+
       if (!routeVideoId) {
-        setVideoError("No video ID was provided.");
+        setVideoError(
+          "No video ID was provided."
+        );
         setLoadingVideo(false);
         return;
       }
@@ -312,7 +463,7 @@ export default function Player() {
 
       /*
        * -------------------------------------------------------
-       * SECOND: YOUTUBE ID FALLBACK
+       * SECOND: YOUTUBE ID
        * -------------------------------------------------------
        */
 
@@ -327,7 +478,9 @@ export default function Player() {
         error = result.error;
       }
 
-      if (cancelled) return;
+      if (cancelled) {
+        return;
+      }
 
       if (error) {
         console.error(
@@ -372,11 +525,14 @@ export default function Player() {
         return;
       }
 
-      console.log("JEE-Tube video loaded:", {
-        databaseId: data.id,
-        youtubeId: data.youtube_id,
-        title: data.title,
-      });
+      console.log(
+        "JEE-Tube video loaded:",
+        {
+          databaseId: data.id,
+          youtubeId: data.youtube_id,
+          title: data.title,
+        }
+      );
 
       setVideo(data);
       setLoadingVideo(false);
@@ -392,12 +548,12 @@ export default function Player() {
   /*
    * =========================================================
    * CHAPTERS
-   * =========================================================
    *
    * Priority:
    *
    * 1. videos.chapters
    * 2. fallback chapters
+   * =========================================================
    */
 
   const chapters = useMemo(() => {
@@ -419,12 +575,13 @@ export default function Player() {
   /*
    * =========================================================
    * LOAD WATCH PROGRESS
-   * =========================================================
    *
    * IMPORTANT:
    *
    * watch_progress.video_id
-   * references videos.id.
+   *         ↓
+   * videos.id
+   * =========================================================
    */
 
   useEffect(() => {
@@ -436,37 +593,62 @@ export default function Player() {
         return;
       }
 
-      const { data, error } = await supabase
-        .from("watch_progress")
-        .select(
-          "current_time_seconds, completed"
-        )
-        .eq("user_id", user.id)
-        .eq("video_id", databaseVideoId)
-        .maybeSingle();
+      try {
+        const {
+          data,
+          error,
+        } = await supabase
+          .from("watch_progress")
+          .select(
+            "current_time_seconds, completed"
+          )
+          .eq("user_id", user.id)
+          .eq("video_id", databaseVideoId)
+          .maybeSingle();
 
-      if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
 
-      if (error) {
-        console.error(
-          "Failed to load watch progress:",
+        if (error) {
+          console.warn(
+            "Failed to load watch progress:",
+            error
+          );
+
+          setResumeTime(0);
+          return;
+        }
+
+        if (data) {
+          const savedTime = Math.max(
+            0,
+            Number(
+              data.current_time_seconds || 0
+            )
+          );
+
+          /*
+           * If completed, start from beginning.
+           */
+
+          if (data.completed) {
+            setResumeTime(0);
+          } else {
+            setResumeTime(savedTime);
+          }
+        } else {
+          setResumeTime(0);
+        }
+      } catch (error) {
+        console.warn(
+          "Watch progress request failed:",
           error
         );
 
-        setResumeTime(0);
-        return;
-      }
-
-      if (data) {
-        const savedTime = Number(
-          data.current_time_seconds || 0
-        );
-
-        setResumeTime(
-          data.completed ? 0 : savedTime
-        );
-      } else {
-        setResumeTime(0);
+        if (!cancelled) {
+          setResumeTime(0);
+        }
       }
     }
 
@@ -481,11 +663,6 @@ export default function Player() {
    * =========================================================
    * LOAD STUDY MARKERS
    * =========================================================
-   *
-   * IMPORTANT:
-   *
-   * Your current study_markers setup uses the YouTube ID.
-   * Therefore this intentionally uses youtubeId.
    */
 
   useEffect(() => {
@@ -500,38 +677,61 @@ export default function Player() {
         return;
       }
 
-      const { data, error } = await supabase
-        .from("study_markers")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("video_id", youtubeId)
-        .order("time", {
-          ascending: true,
-        });
+      try {
+        const {
+          data,
+          error,
+        } = await supabase
+          .from("study_markers")
+          .select("*")
+          .eq("user_id", user.id)
+          .eq("video_id", youtubeId)
+          .order("time", {
+            ascending: true,
+          });
 
-      if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
 
-      if (error) {
+        if (error) {
+          console.error(
+            "Failed to load study markers:",
+            error
+          );
+
+          setMarkers([]);
+        } else {
+          setMarkers(
+            (data || []).map(
+              (marker) => ({
+                id: marker.id,
+                videoId: marker.video_id,
+                type: marker.type,
+                time: Number(
+                  marker.time || 0
+                ),
+                text: marker.text || "",
+                createdAt:
+                  marker.created_at,
+              })
+            )
+          );
+        }
+      } catch (error) {
         console.error(
-          "Failed to load study markers:",
+          "Study markers request failed:",
           error
         );
 
-        setMarkers([]);
-      } else {
-        setMarkers(
-          (data || []).map((marker) => ({
-            id: marker.id,
-            videoId: marker.video_id,
-            type: marker.type,
-            time: Number(marker.time || 0),
-            text: marker.text || "",
-            createdAt: marker.created_at,
-          }))
-        );
+        if (!cancelled) {
+          setMarkers([]);
+        }
       }
 
-      setLoadingMarkers(false);
+      if (!cancelled) {
+        setLoadingMarkers(false);
+      }
     }
 
     loadMarkers();
@@ -539,16 +739,32 @@ export default function Player() {
     return () => {
       cancelled = true;
     };
-  }, [user, youtubeId, validYouTubeId]);
+  }, [
+    user,
+    youtubeId,
+    validYouTubeId,
+  ]);
 
   /*
    * =========================================================
    * SAVE WATCH PROGRESS
+   *
+   * Uses videos.id.
    * =========================================================
    */
 
-  async function saveWatchProgress(time) {
-    if (!user || !databaseVideoId) {
+  function saveWatchProgress(
+    time,
+    immediate = false
+  ) {
+    const currentUser = userRef.current;
+    const currentDatabaseVideoId =
+      databaseVideoIdRef.current;
+
+    if (
+      !currentUser ||
+      !currentDatabaseVideoId
+    ) {
       return;
     }
 
@@ -557,35 +773,73 @@ export default function Player() {
       Math.floor(Number(time) || 0)
     );
 
+    latestTimeRef.current = seconds;
+
+    /*
+     * Clear previous pending save.
+     */
+
     if (progressSaveRef.current) {
-      clearTimeout(progressSaveRef.current);
+      clearTimeout(
+        progressSaveRef.current
+      );
+
+      progressSaveRef.current = null;
     }
 
-    progressSaveRef.current = setTimeout(
-      async () => {
-        const { error } = await supabase
-          .from("watch_progress")
-          .upsert(
-            {
-              user_id: user.id,
-              video_id: databaseVideoId,
-              current_time_seconds: seconds,
-              completed: false,
-            },
-            {
-              onConflict: "user_id,video_id",
-            }
-          );
+    const performSave = async () => {
+      try {
+        const { error } =
+          await supabase
+            .from("watch_progress")
+            .upsert(
+              {
+                user_id:
+                  currentUser.id,
+
+                video_id:
+                  currentDatabaseVideoId,
+
+                current_time_seconds:
+                  seconds,
+
+                completed: false,
+              },
+              {
+                onConflict:
+                  "user_id,video_id",
+              }
+            );
 
         if (error) {
-          console.error(
+          /*
+           * Network/auth problems should not
+           * crash the player.
+           */
+
+          console.warn(
             "Failed to save watch progress:",
-            error
+            error.message || error
           );
         }
-      },
-      800
-    );
+      } catch (error) {
+        console.warn(
+          "Watch progress save failed:",
+          error
+        );
+      }
+    };
+
+    if (immediate) {
+      performSave();
+      return;
+    }
+
+    progressSaveRef.current =
+      setTimeout(() => {
+        progressSaveRef.current = null;
+        performSave();
+      }, 800);
   }
 
   /*
@@ -595,30 +849,92 @@ export default function Player() {
    */
 
   async function saveCompletedProgress() {
-    if (!user || !databaseVideoId) {
+    const currentUser = userRef.current;
+    const currentDatabaseVideoId =
+      databaseVideoIdRef.current;
+
+    if (
+      !currentUser ||
+      !currentDatabaseVideoId
+    ) {
       return;
     }
 
-    const { error } = await supabase
-      .from("watch_progress")
-      .upsert(
-        {
-          user_id: user.id,
-          video_id: databaseVideoId,
-          current_time_seconds: 0,
-          completed: true,
-        },
-        {
-          onConflict: "user_id,video_id",
-        }
+    /*
+     * Cancel pending normal save.
+     */
+
+    if (progressSaveRef.current) {
+      clearTimeout(
+        progressSaveRef.current
       );
 
-    if (error) {
-      console.error(
-        "Failed to save completed status:",
+      progressSaveRef.current = null;
+    }
+
+    try {
+      const { error } =
+        await supabase
+          .from("watch_progress")
+          .upsert(
+            {
+              user_id:
+                currentUser.id,
+
+              video_id:
+                currentDatabaseVideoId,
+
+              current_time_seconds: 0,
+
+              completed: true,
+            },
+            {
+              onConflict:
+                "user_id,video_id",
+            }
+          );
+
+      if (error) {
+        console.warn(
+          "Failed to save completed status:",
+          error.message || error
+        );
+      }
+    } catch (error) {
+      console.warn(
+        "Completed progress save failed:",
         error
       );
     }
+  }
+
+  /*
+   * =========================================================
+   * GET CURRENT PLAYER TIME
+   * =========================================================
+   */
+
+  function getCurrentTimestamp() {
+    try {
+      if (
+        playerRef.current &&
+        typeof playerRef.current
+          .getCurrentTime === "function"
+      ) {
+        const time =
+          playerRef.current.getCurrentTime();
+
+        if (Number.isFinite(time)) {
+          latestTimeRef.current = time;
+          setCurrentTime(time);
+          return time;
+        }
+      }
+    } catch {
+      // Player not ready.
+    }
+
+    return latestTimeRef.current;
   }
 
   /*
@@ -629,6 +945,7 @@ export default function Player() {
 
   useEffect(() => {
     let cancelled = false;
+    let playerCreated = false;
 
     clearInterval(intervalRef.current);
 
@@ -637,38 +954,61 @@ export default function Player() {
       !video ||
       !validYouTubeId
     ) {
-      return;
+      return undefined;
     }
 
     setPlayerError(false);
 
+    /*
+     * -------------------------------------------------------
+     * TIME TRACKING
+     * -------------------------------------------------------
+     */
+
     function startTimeTracking() {
       clearInterval(intervalRef.current);
 
-      intervalRef.current = setInterval(() => {
-        try {
-          if (
-            playerRef.current &&
-            typeof playerRef.current.getCurrentTime ===
-              "function"
-          ) {
-            const time =
-              playerRef.current.getCurrentTime();
+      intervalRef.current =
+        setInterval(() => {
+          try {
+            if (
+              playerRef.current &&
+              typeof playerRef.current
+                .getCurrentTime ===
+                "function"
+            ) {
+              const time =
+                playerRef.current.getCurrentTime();
 
-            if (Number.isFinite(time)) {
-              setCurrentTime(time);
-              saveWatchProgress(time);
+              if (Number.isFinite(time)) {
+                latestTimeRef.current =
+                  time;
+
+                setCurrentTime(time);
+
+                /*
+                 * Save roughly every 5 seconds.
+                 */
+
+                saveWatchProgress(time);
+              }
             }
+          } catch {
+            // Player may not be ready.
           }
-        } catch {
-          // Player not ready.
-        }
-      }, 5000);
+        }, 5000);
     }
+
+    /*
+     * -------------------------------------------------------
+     * CREATE PLAYER
+     * -------------------------------------------------------
+     */
 
     function createPlayer() {
       if (
         cancelled ||
+        playerCreated ||
         !window.YT ||
         !window.YT.Player ||
         !validYouTubeId
@@ -676,89 +1016,168 @@ export default function Player() {
         return;
       }
 
+      playerCreated = true;
+
+      /*
+       * Remove previous player if any.
+       */
+
       try {
         playerRef.current?.destroy();
       } catch {
         // Ignore.
       }
 
-      playerRef.current = new window.YT.Player(
-        "jee-tube-player",
-        {
-          videoId: youtubeId,
+      try {
+        playerRef.current =
+          new window.YT.Player(
+            "jee-tube-player",
+            {
+              videoId: youtubeId,
 
-          playerVars: {
-            autoplay: 0,
-            controls: 1,
-            rel: 0,
-            modestbranding: 1,
-            playsinline: 1,
-          },
+              playerVars: {
+                autoplay: 0,
+                controls: 1,
+                rel: 0,
+                modestbranding: 1,
+                playsinline: 1,
+              },
 
-          events: {
-            onReady: (event) => {
-              startTimeTracking();
+              events: {
+                /*
+                 * ------------------------------------------------
+                 * READY
+                 * ------------------------------------------------
+                 */
 
-              /*
-               * Resume previous position.
-               */
-
-              if (resumeTime > 5) {
-                event.target.seekTo(
-                  resumeTime,
-                  true
-                );
-
-                setCurrentTime(
-                  resumeTime
-                );
-              }
-            },
-
-            onStateChange: (event) => {
-              /*
-               * 0 = ended
-               * 1 = playing
-               * 2 = paused
-               */
-
-              if (event.data === 0) {
-                saveCompletedProgress();
-              }
-
-              if (
-                event.data === 1 ||
-                event.data === 2
-              ) {
-                try {
-                  const time =
-                    event.target.getCurrentTime();
-
-                  if (Number.isFinite(time)) {
-                    setCurrentTime(time);
-                    saveWatchProgress(time);
+                onReady: (event) => {
+                  if (cancelled) {
+                    return;
                   }
-                } catch {
-                  // Ignore.
-                }
-              }
-            },
 
-            onError: (event) => {
-              console.error(
-                "YouTube player error:",
-                event.data
-              );
+                  startTimeTracking();
 
-              setPlayerError(true);
-            },
-          },
-        }
-      );
+                  /*
+                   * Resume previous position.
+                   */
+
+                  if (resumeTime > 5) {
+                    try {
+                      event.target.seekTo(
+                        resumeTime,
+                        true
+                      );
+
+                      latestTimeRef.current =
+                        resumeTime;
+
+                      setCurrentTime(
+                        resumeTime
+                      );
+                    } catch {
+                      // Ignore seek failure.
+                    }
+                  }
+                },
+
+                /*
+                 * ------------------------------------------------
+                 * STATE CHANGE
+                 * ------------------------------------------------
+                 */
+
+                onStateChange: (event) => {
+                  if (cancelled) {
+                    return;
+                  }
+
+                  /*
+                   * 0 = ended
+                   * 1 = playing
+                   * 2 = paused
+                   */
+
+                  if (event.data === 0) {
+                    saveCompletedProgress();
+                    return;
+                  }
+
+                  if (
+                    event.data === 1 ||
+                    event.data === 2
+                  ) {
+                    try {
+                      const time =
+                        event.target.getCurrentTime();
+
+                      if (
+                        Number.isFinite(
+                          time
+                        )
+                      ) {
+                        latestTimeRef.current =
+                          time;
+
+                        setCurrentTime(
+                          time
+                        );
+
+                        /*
+                         * IMPORTANT:
+                         * Save immediately on pause.
+                         */
+
+                        if (
+                          event.data === 2
+                        ) {
+                          saveWatchProgress(
+                            time,
+                            true
+                          );
+                        } else {
+                          saveWatchProgress(
+                            time
+                          );
+                        }
+                      }
+                    } catch {
+                      // Ignore.
+                    }
+                  }
+                },
+
+                /*
+                 * ------------------------------------------------
+                 * PLAYER ERROR
+                 * ------------------------------------------------
+                 */
+
+                onError: (event) => {
+                  console.error(
+                    "YouTube player error:",
+                    event.data
+                  );
+
+                  setPlayerError(true);
+                },
+              },
+            }
+          );
+      } catch (error) {
+        console.error(
+          "Failed to create YouTube player:",
+          error
+        );
+
+        playerCreated = false;
+        setPlayerError(true);
+      }
     }
 
     /*
-     * YouTube API already loaded.
+     * -------------------------------------------------------
+     * YOUTUBE API ALREADY LOADED
+     * -------------------------------------------------------
      */
 
     if (
@@ -768,19 +1187,30 @@ export default function Player() {
       createPlayer();
     } else {
       /*
-       * YouTube API not loaded yet.
+       * -----------------------------------------------------
+       * YOUTUBE API NOT LOADED
+       * -----------------------------------------------------
        */
 
       const previousCallback =
         window.onYouTubeIframeAPIReady;
 
-      window.onYouTubeIframeAPIReady = () => {
-        previousCallback?.();
+      window.onYouTubeIframeAPIReady =
+        () => {
+          try {
+            previousCallback?.();
+          } catch {
+            // Ignore old callback errors.
+          }
 
-        if (!cancelled) {
-          createPlayer();
-        }
-      };
+          if (!cancelled) {
+            createPlayer();
+          }
+        };
+
+      /*
+       * Load API only once.
+       */
 
       if (
         !document.getElementById(
@@ -788,7 +1218,9 @@ export default function Player() {
         )
       ) {
         const script =
-          document.createElement("script");
+          document.createElement(
+            "script"
+          );
 
         script.id =
           "youtube-iframe-api";
@@ -798,9 +1230,17 @@ export default function Player() {
 
         script.async = true;
 
-        document.body.appendChild(script);
+        document.body.appendChild(
+          script
+        );
       }
     }
+
+    /*
+     * -------------------------------------------------------
+     * CLEANUP
+     * -------------------------------------------------------
+     */
 
     return () => {
       cancelled = true;
@@ -813,7 +1253,28 @@ export default function Player() {
         clearTimeout(
           progressSaveRef.current
         );
+
+        progressSaveRef.current = null;
       }
+
+      /*
+       * Save the latest position before
+       * leaving the player.
+       */
+
+      const latestTime =
+        latestTimeRef.current;
+
+      if (latestTime > 0) {
+        saveWatchProgress(
+          latestTime,
+          true
+        );
+      }
+
+      /*
+       * Destroy YouTube player.
+       */
 
       try {
         playerRef.current?.destroy();
@@ -830,34 +1291,6 @@ export default function Player() {
     loadingVideo,
     resumeTime,
   ]);
-
-  /*
-   * =========================================================
-   * CURRENT TIME
-   * =========================================================
-   */
-
-  function getCurrentTimestamp() {
-    try {
-      if (
-        playerRef.current &&
-        typeof playerRef.current.getCurrentTime ===
-          "function"
-      ) {
-        const time =
-          playerRef.current.getCurrentTime();
-
-        if (Number.isFinite(time)) {
-          setCurrentTime(time);
-          return time;
-        }
-      }
-    } catch {
-      // Fallback.
-    }
-
-    return currentTime;
-  }
 
   /*
    * =========================================================
@@ -903,19 +1336,27 @@ export default function Player() {
       )
     );
 
-    const { error } = await supabase
-      .from("study_markers")
-      .insert({
-        id: marker.id,
-        user_id: user.id,
-        video_id: youtubeId,
-        type: marker.type,
-        time: Math.floor(marker.time),
-        text: marker.text,
-        created_at: marker.createdAt,
-      });
+    try {
+      const { error } =
+        await supabase
+          .from("study_markers")
+          .insert({
+            id: marker.id,
+            user_id: user.id,
+            video_id: youtubeId,
+            type: marker.type,
+            time: Math.floor(
+              marker.time
+            ),
+            text: marker.text,
+            created_at:
+              marker.createdAt,
+          });
 
-    if (error) {
+      if (error) {
+        throw error;
+      }
+    } catch (error) {
       console.error(
         "Failed to save marker:",
         error
@@ -957,7 +1398,9 @@ export default function Player() {
   }
 
   async function saveNote() {
-    if (!noteText.trim()) return;
+    if (!noteText.trim()) {
+      return;
+    }
 
     if (!user) {
       alert(
@@ -990,19 +1433,27 @@ export default function Player() {
     setNoteOpen(false);
     setNoteText("");
 
-    const { error } = await supabase
-      .from("study_markers")
-      .insert({
-        id: marker.id,
-        user_id: user.id,
-        video_id: youtubeId,
-        type: "note",
-        time: Math.floor(timestamp),
-        text: marker.text,
-        created_at: marker.createdAt,
-      });
+    try {
+      const { error } =
+        await supabase
+          .from("study_markers")
+          .insert({
+            id: marker.id,
+            user_id: user.id,
+            video_id: youtubeId,
+            type: "note",
+            time: Math.floor(
+              timestamp
+            ),
+            text: marker.text,
+            created_at:
+              marker.createdAt,
+          });
 
-    if (error) {
+      if (error) {
+        throw error;
+      }
+    } catch (error) {
       console.error(
         "Failed to save note:",
         error
@@ -1039,7 +1490,12 @@ export default function Player() {
 
         playerRef.current.playVideo?.();
 
-        setCurrentTime(marker.time);
+        latestTimeRef.current =
+          marker.time;
+
+        setCurrentTime(
+          marker.time
+        );
       }
     } catch {
       // Ignore.
@@ -1063,9 +1519,15 @@ export default function Player() {
         );
 
         playerRef.current.playVideo?.();
+
+        latestTimeRef.current =
+          chapter.time;
       }
 
-      setCurrentTime(chapter.time);
+      setCurrentTime(
+        chapter.time
+      );
+
       setChaptersOpen(false);
     } catch {
       // Ignore.
@@ -1079,7 +1541,9 @@ export default function Player() {
    */
 
   async function deleteMarker(id) {
-    if (!user) return;
+    if (!user) {
+      return;
+    }
 
     const oldMarker =
       markers.find(
@@ -1094,13 +1558,18 @@ export default function Player() {
       )
     );
 
-    const { error } = await supabase
-      .from("study_markers")
-      .delete()
-      .eq("id", id)
-      .eq("user_id", user.id);
+    try {
+      const { error } =
+        await supabase
+          .from("study_markers")
+          .delete()
+          .eq("id", id)
+          .eq("user_id", user.id);
 
-    if (error) {
+      if (error) {
+        throw error;
+      }
+    } catch (error) {
       console.error(
         "Failed to delete marker:",
         error
@@ -1224,6 +1693,8 @@ export default function Player() {
     <Layout>
       <div className="jt-player-page">
 
+        {/* BACK */}
+
         <button
           onClick={() => navigate(-1)}
           className="jt-player-back"
@@ -1236,6 +1707,8 @@ export default function Player() {
         <div className="jt-player-wrapper">
           <div id="jee-tube-player" />
         </div>
+
+        {/* PLAYER ERROR */}
 
         {playerError && (
           <div className="jt-player-error">
@@ -1274,6 +1747,7 @@ export default function Player() {
           <h1>{video.title}</h1>
 
           <div className="jt-video-meta">
+
             {video.teacher && (
               <span>
                 👨‍🏫 {video.teacher}
@@ -1303,6 +1777,7 @@ export default function Player() {
                 ⚡ {video.difficulty}
               </span>
             )}
+
           </div>
         </section>
 
@@ -1320,7 +1795,9 @@ export default function Player() {
             ) < 1 && (
               <span className="jt-resume-label">
                 Resumed from{" "}
-                {formatTime(resumeTime)}
+                {formatTime(
+                  resumeTime
+                )}
               </span>
             )}
         </div>
@@ -1376,6 +1853,7 @@ export default function Player() {
                   </div>
 
                   <div className="jt-chapters-list">
+
                     {chapters.map(
                       (chapter) => {
                         const isActive =
@@ -1419,6 +1897,7 @@ export default function Player() {
                         );
                       }
                     )}
+
                   </div>
                 </div>
               )}
@@ -1459,6 +1938,7 @@ export default function Player() {
             <span>📝</span>
             Note
           </button>
+
         </div>
 
         {/* LOGIN HINT */}
@@ -1654,10 +2134,14 @@ export default function Player() {
                     </div>
                   )
                 )}
+
             </div>
           )}
+
         </section>
+
       </div>
     </Layout>
   );
 }
+
