@@ -1,3 +1,4 @@
+
 import "./index.css";
 import { Routes, Route } from "react-router-dom";
 
@@ -5,6 +6,7 @@ import Login from "./pages/Login";
 import Home from "./pages/Home";
 import Physics from "./pages/Physics";
 import Player from "./pages/Player";
+import Admin from "./pages/Admin";
 
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 
@@ -19,6 +21,9 @@ function App() {
         <Route path="/" element={<Home />} />
         <Route path="/physics" element={<Physics />} />
         <Route path="/player/:videoId" element={<Player />} />
+
+        {/* Private Admin Panel */}
+        <Route path="/admin" element={<Admin />} />
       </Route>
 
       {/* Fallback */}

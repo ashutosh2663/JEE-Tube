@@ -1,76 +1,108 @@
-import React from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
+
 import Layout from "../components/layout/Layout";
 import Hero from "../components/home/Hero";
 import SubjectRow from "../components/home/SubjectRow";
+import ContinueWatching from "../components/home/ContinueWatching";
 
-const demoVideos = [
-  {
-    id: "demo-1",
-    title: "Complete Physics Lecture",
-    teacher: "JEE Faculty",
-    chapter: "Mechanics",
-    duration: "1:42:20",
-    thumbnail:
-      "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg",
-  },
-  {
-    id: "demo-2",
-    title: "Important JEE Concepts",
-    teacher: "JEE Faculty",
-    chapter: "Physics",
-    duration: "58:40",
-    thumbnail:
-      "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg",
-  },
-  {
-    id: "demo-3",
-    title: "JEE Advanced Problem Solving",
-    teacher: "JEE Faculty",
-    chapter: "Advanced",
-    duration: "1:20:15",
-    thumbnail:
-      "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg",
-  },
-  {
-    id: "demo-4",
-    title: "Quick Revision",
-    teacher: "JEE Faculty",
-    chapter: "Revision",
-    duration: "42:10",
-    thumbnail:
-      "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg",
-  },
-];
+import { getHomeVideos } from "../lib/videoLibrary";
 
 export default function Home() {
+  const [physicsVideos, setPhysicsVideos] = useState([]);
+  const [chemistryVideos, setChemistryVideos] = useState([]);
+  const [mathematicsVideos, setMathematicsVideos] =
+    useState([]);
+
+  const [loading, setLoading] = useState(true);
+
+  const loadHomeVideos = useCallback(async () => {
+    try {
+      setLoading(true);
+
+      const [
+        physics,
+        chemistry,
+        mathematics,
+      ] = await Promise.all([
+        getHomeVideos("Physics", 8),
+        getHomeVideos("Chemistry", 8),
+        getHomeVideos("Mathematics", 8),
+      ]);
+
+      setPhysicsVideos(physics);
+      setChemistryVideos(chemistry);
+      setMathematicsVideos(mathematics);
+    } catch (error) {
+      console.error(
+        "Could not load Home videos:",
+        error
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadHomeVideos();
+  }, [loadHomeVideos]);
+
   return (
     <Layout>
       <Hero />
 
       <div className="home-content">
-        <SubjectRow
-          title="Continue Learning"
-          videos={demoVideos}
-          viewAllPath="/history"
-        />
 
-        <SubjectRow
-          title="Physics"
-          videos={demoVideos}
-          viewAllPath="/subject/physics"
-        />
+        {/* =========================================
+            CONTINUE WATCHING
+            User-specific.
+            Comes from watch_progress.
+        ========================================= */}
 
-        <SubjectRow
-          title="Chemistry"
-          videos={demoVideos}
-          viewAllPath="/subject/chemistry"
-        />
+        <ContinueWatching />
 
-        <SubjectRow
-          title="Mathematics"
-          videos={demoVideos}
-          viewAllPath="/subject/mathematics"
-        />
+        {/* =========================================
+            PHYSICS
+        ========================================= */}
+
+        {!loading &&
+          physicsVideos.length > 0 && (
+            <SubjectRow
+              title="Physics"
+              videos={physicsVideos}
+              viewAllPath="/subject/physics"
+            />
+          )}
+
+        {/* =========================================
+            CHEMISTRY
+        ========================================= */}
+
+        {!loading &&
+          chemistryVideos.length > 0 && (
+            <SubjectRow
+              title="Chemistry"
+              videos={chemistryVideos}
+              viewAllPath="/subject/chemistry"
+            />
+          )}
+
+        {/* =========================================
+            MATHEMATICS
+        ========================================= */}
+
+        {!loading &&
+          mathematicsVideos.length > 0 && (
+            <SubjectRow
+              title="Mathematics"
+              videos={mathematicsVideos}
+              viewAllPath="/subject/mathematics"
+            />
+          )}
+
       </div>
     </Layout>
   );

@@ -11,9 +11,6 @@ import {
 export default function Settings() {
   const navigate = useNavigate();
 
-  const isAdmin =
-    localStorage.getItem("jee_tube_admin") === "true";
-
   return (
     <main className="settings-page">
       {/* HEADER */}
@@ -25,7 +22,7 @@ export default function Settings() {
         <div>
           <h1>General Settings</h1>
           <p>
-            Manage your JEE-Tube experience and account preferences.
+            Manage your JEE-Tube experience and content.
           </p>
         </div>
       </div>
@@ -34,7 +31,10 @@ export default function Settings() {
       <section className="settings-section">
         <h2>Account</h2>
 
-        <div className="settings-card">
+        <button
+          type="button"
+          className="settings-card"
+        >
           <div className="settings-card-icon">
             <User size={21} />
           </div>
@@ -47,14 +47,17 @@ export default function Settings() {
           </div>
 
           <ChevronRight size={20} />
-        </div>
+        </button>
       </section>
 
       {/* APPEARANCE */}
       <section className="settings-section">
         <h2>Appearance</h2>
 
-        <div className="settings-card">
+        <button
+          type="button"
+          className="settings-card"
+        >
           <div className="settings-card-icon">
             <Monitor size={21} />
           </div>
@@ -67,35 +70,35 @@ export default function Settings() {
           </div>
 
           <ChevronRight size={20} />
-        </div>
+        </button>
       </section>
 
-      {/* ADMIN */}
-      {isAdmin && (
-        <section className="settings-section">
-          <h2>Administration</h2>
+      {/* ADMINISTRATION */}
+      <section className="settings-section">
+        <h2>Administration</h2>
 
-          <button
-            type="button"
-            className="admin-panel-card"
-            onClick={() => navigate("/admin")}
-          >
-            <div className="admin-panel-icon">
-              <ShieldCheck size={24} />
-            </div>
+        <button
+          type="button"
+          className="admin-panel-card"
+          onClick={() => navigate("/admin")}
+        >
+          <div className="admin-panel-icon">
+            <ShieldCheck size={24} />
+          </div>
 
-            <div className="settings-card-content">
-              <h3>Admin Panel</h3>
-              <p>
-                Manage videos, classifications, subjects and
-                JEE-Tube content.
-              </p>
-            </div>
+          <div className="settings-card-content">
+            <h3>Admin Panel</h3>
 
-            <ChevronRight size={22} />
-          </button>
-        </section>
-      )}
+            <p>
+              Manage videos, manually classify content, inject
+              YouTube URLs, review unclassified videos, and
+              control JEE-Tube's content database.
+            </p>
+          </div>
+
+          <ChevronRight size={22} />
+        </button>
+      </section>
     </main>
   );
 }
