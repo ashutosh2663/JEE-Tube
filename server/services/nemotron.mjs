@@ -1,10 +1,15 @@
 const NVIDIA_API_URL =
   "https://integrate.api.nvidia.com/v1/chat/completions";
 
-const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY;
+// Support both environment-variable names.
+const NVIDIA_API_KEY =
+  process.env.NVIDIA_API_KEY ||
+  process.env.NEMOTRON_API_KEY;
 
 if (!NVIDIA_API_KEY) {
-  throw new Error("NVIDIA_API_KEY is missing.");
+  throw new Error(
+    "NVIDIA_API_KEY or NEMOTRON_API_KEY is missing."
+  );
 }
 
 const MODEL =
@@ -27,14 +32,12 @@ function extractJson(text) {
     .replace(/\s*```$/i, "")
     .trim();
 
-  // Direct JSON
   try {
     return JSON.parse(cleaned);
   } catch {
     // Continue with extraction.
   }
 
-  // Find the first JSON object.
   const start = cleaned.indexOf("{");
 
   if (start === -1) {
@@ -75,7 +78,8 @@ function extractJson(text) {
       depth--;
 
       if (depth === 0) {
-        const candidate = cleaned.slice(start, i + 1);
+        const candidate =
+          cleaned.slice(start, i + 1);
 
         try {
           return JSON.parse(candidate);
@@ -102,7 +106,6 @@ function getModelText(data) {
     return null;
   }
 
-  // Normal response.
   if (
     typeof message.content === "string" &&
     message.content.trim()
@@ -110,8 +113,6 @@ function getModelText(data) {
     return message.content.trim();
   }
 
-  // Some Nemotron responses put the useful output
-  // into reasoning instead.
   if (
     typeof message.reasoning === "string" &&
     message.reasoning.trim()
@@ -222,7 +223,9 @@ export async function askNemotron({
     }
 
     return text.trim();
+
   } catch (error) {
+
     if (
       error?.name ===
       "AbortError"
@@ -233,6 +236,7 @@ export async function askNemotron({
     }
 
     throw error;
+
   } finally {
     clearTimeout(timeout);
   }

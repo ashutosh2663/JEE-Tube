@@ -22,6 +22,42 @@ import { Link } from "react-router-dom";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
+/**
+ * Safely parse API responses.
+ *
+ * Handles:
+ * - JSON responses
+ * - Empty responses
+ * - Plain-text error responses
+ *
+ * This prevents:
+ * "Unexpected end of JSON input"
+ */
+async function parseApiResponse(response) {
+  const text = await response.text();
+
+  if (!text.trim()) {
+    return {
+      data: {},
+      rawText: "",
+    };
+  }
+
+  try {
+    return {
+      data: JSON.parse(text),
+      rawText: text,
+    };
+  } catch {
+    return {
+      data: {
+        error: text,
+      },
+      rawText: text,
+    };
+  }
+}
+
 export default function Admin() {
   const [activeSection, setActiveSection] = useState("overview");
 
@@ -91,7 +127,7 @@ export default function Admin() {
         `${API_BASE}/api/admin/stats`
       );
 
-      const data = await response.json();
+      const { data } = await parseApiResponse(response);
 
       if (!response.ok) {
         throw new Error(
@@ -119,7 +155,7 @@ export default function Admin() {
         `${API_BASE}/api/admin/videos?limit=100`
       );
 
-      const data = await response.json();
+      const { data } = await parseApiResponse(response);
 
       if (!response.ok) {
         throw new Error(
@@ -147,7 +183,7 @@ export default function Admin() {
         `${API_BASE}/api/admin/unclassified`
       );
 
-      const data = await response.json();
+      const { data } = await parseApiResponse(response);
 
       if (!response.ok) {
         throw new Error(
@@ -248,8 +284,8 @@ export default function Admin() {
         {
           method: "POST",
           headers: {
-            "Content-Type":
-              "application/json",
+            "Content-Type": "application/json",
+            Accept: "application/json",
           },
           body: JSON.stringify({
             url: cleanUrl,
@@ -257,21 +293,58 @@ export default function Admin() {
         }
       );
 
-      const data = await response.json();
+      const { data, rawText } =
+        await parseApiResponse(response);
+
+      console.log(
+        "Injection response:",
+        response.status,
+        data,
+        rawText
+      );
 
       if (!response.ok) {
         throw new Error(
           data.error ||
-            "Video injection failed."
+            data.message ||
+            rawText ||
+            `Video injection failed (HTTP ${response.status}).`
         );
       }
 
-      setMessage(
-        data.message ||
-          `Video processed successfully. Action: ${
-            data.action || "completed"
+      /*
+       * Backend may return:
+       *
+       * {
+       *   action: "inserted"
+       * }
+       *
+       * OR:
+       *
+       * {
+       *   action: "skipped",
+       *   reason: "already_exists",
+       *   id: 685
+       * }
+       */
+
+      if (
+        data.action === "skipped" &&
+        data.reason === "already_exists"
+      ) {
+        setMessage(
+          `Video already exists in JEE-Tube. Database ID: ${
+            data.id ?? "unknown"
           }`
-      );
+        );
+      } else {
+        setMessage(
+          data.message ||
+            `Video processed successfully. Action: ${
+              data.action || "completed"
+            }`
+        );
+      }
 
       setUrl("");
 
@@ -306,14 +379,20 @@ export default function Admin() {
         `${API_BASE}/api/admin/videos/${id}`,
         {
           method: "DELETE",
+          headers: {
+            Accept: "application/json",
+          },
         }
       );
 
-      const data = await response.json();
+      const { data, rawText } =
+        await parseApiResponse(response);
 
       if (!response.ok) {
         throw new Error(
           data.error ||
+            data.message ||
+            rawText ||
             "Failed to delete video."
         );
       }
@@ -576,9 +655,7 @@ export default function Admin() {
                 description="Paste a YouTube URL and send it through the JEE-Tube classification pipeline."
                 action="Open Injector"
                 onClick={() =>
-                  setActiveSection(
-                    "injector"
-                  )
+                  setActiveSection("injector")
                 }
               />
 
@@ -588,9 +665,7 @@ export default function Admin() {
                 description={`${pendingVideos} video(s) are waiting for classification or manual review.`}
                 action="Open Queue"
                 onClick={() =>
-                  setActiveSection(
-                    "queue"
-                  )
+                  setActiveSection("queue")
                 }
               />
 
@@ -647,9 +722,7 @@ export default function Admin() {
                     setUrl(e.target.value)
                   }
                   onKeyDown={(e) => {
-                    if (
-                      e.key === "Enter"
-                    ) {
+                    if (e.key === "Enter") {
                       injectUrl();
                     }
                   }}
@@ -745,9 +818,7 @@ export default function Admin() {
                 <input
                   value={search}
                   onChange={(e) =>
-                    setSearch(
-                      e.target.value
-                    )
+                    setSearch(e.target.value)
                   }
                   placeholder="Search videos..."
                 />
@@ -757,9 +828,7 @@ export default function Admin() {
               <select
                 value={filter}
                 onChange={(e) =>
-                  setFilter(
-                    e.target.value
-                  )
+                  setFilter(e.target.value)
                 }
               >
                 <option value="all">
@@ -817,13 +886,11 @@ export default function Admin() {
                     </div>
 
                     <span>
-                      {video.subject ||
-                        "—"}
+                      {video.subject || "—"}
                     </span>
 
                     <span>
-                      {video.chapter ||
-                        "—"}
+                      {video.chapter || "—"}
                     </span>
 
                     <span className="admin-relevance">
@@ -840,22 +907,17 @@ export default function Admin() {
                     <button
                       className="admin-danger-btn"
                       onClick={() =>
-                        removeVideo(
-                          video.id
-                        )
+                        removeVideo(video.id)
                       }
                     >
-                      <Trash2
-                        size={16}
-                      />
+                      <Trash2 size={16} />
                     </button>
 
                   </div>
                 )
               )}
 
-              {filteredVideos.length ===
-                0 && (
+              {filteredVideos.length === 0 && (
                 <div className="admin-empty">
                   No videos found.
                 </div>
@@ -870,8 +932,7 @@ export default function Admin() {
             AI CLASSIFICATION
         ===================================================== */}
 
-        {activeSection ===
-          "classification" && (
+        {activeSection === "classification" && (
           <section className="admin-content">
 
             <div className="admin-page-title">
@@ -915,9 +976,7 @@ export default function Admin() {
 
             <div className="admin-warning">
 
-              <AlertTriangle
-                size={20}
-              />
+              <AlertTriangle size={20} />
 
               <div>
 
@@ -968,9 +1027,7 @@ export default function Admin() {
             {queue.length === 0 ? (
               <div className="admin-empty-card">
 
-                <CheckCircle2
-                  size={42}
-                />
+                <CheckCircle2 size={42} />
 
                 <h3>
                   Queue is empty
@@ -1004,8 +1061,7 @@ export default function Admin() {
 
                       <p>
                         YouTube ID:{" "}
-                        {item.youtube_id ||
-                          "—"}
+                        {item.youtube_id || "—"}
                       </p>
 
                     </div>
@@ -1019,9 +1075,7 @@ export default function Admin() {
                           rel="noreferrer"
                           className="admin-secondary-btn"
                         >
-                          <ExternalLink
-                            size={17}
-                          />
+                          <ExternalLink size={17} />
                           Open
                         </a>
                       )}
@@ -1094,13 +1148,9 @@ export default function Admin() {
               />
 
               <StatCard
-                icon={
-                  <BrainCircuit />
-                }
+                icon={<BrainCircuit />}
                 label="Classified"
-                value={
-                  classifiedVideos
-                }
+                value={classifiedVideos}
               />
 
               <StatCard
@@ -1225,9 +1275,7 @@ function AdminPanelCard({
 
         <span>
           {action}
-          <ChevronRight
-            size={16}
-          />
+          <ChevronRight size={16} />
         </span>
 
       </div>
@@ -1257,9 +1305,7 @@ function AiCard({
     <div className="admin-ai-card">
 
       <div className="admin-ai-icon">
-        <BrainCircuit
-          size={25}
-        />
+        <BrainCircuit size={25} />
       </div>
 
       <h3>{title}</h3>

@@ -1,10 +1,12 @@
+import "dotenv/config";
 
 const API_KEY = process.env.YOUTUBE_API_KEY;
 
 if (!API_KEY) {
-  throw new Error("YOUTUBE_API_KEY is missing.");
+  throw new Error(
+    "YOUTUBE_API_KEY is missing. Check the root .env file."
+  );
 }
-
 
 // =========================================================
 // YOUTUBE API REQUEST
@@ -17,20 +19,19 @@ async function youtubeRequest(endpoint, params) {
   });
 
   const response = await fetch(
-    `https://www.googleapis.com/youtube/v3/${endpoint}?${searchParams}`
+    `https://www.googleapis.com/youtube/v3/${endpoint}?${searchParams.toString()}`
   );
 
   if (!response.ok) {
     const errorText = await response.text();
 
     throw new Error(
-      `YouTube API error: ${errorText}`
+      `YouTube API error (${response.status}): ${errorText}`
     );
   }
 
   return response.json();
 }
-
 
 // =========================================================
 // EXTRACT YOUTUBE VIDEO ID
@@ -43,10 +44,7 @@ export function extractYoutubeVideoId(url) {
 
   const value = url.trim();
 
-  // -------------------------------------------------------
-  // RAW VIDEO ID
-  // -------------------------------------------------------
-
+  // Raw YouTube video ID
   if (/^[a-zA-Z0-9_-]{11}$/.test(value)) {
     return value;
   }
@@ -64,17 +62,16 @@ export function extractYoutubeVideoId(url) {
     .replace(/^www\./, "")
     .replace(/^m\./, "");
 
-  // -------------------------------------------------------
+  // =======================================================
   // YOUTUBE.COM
-  // -------------------------------------------------------
+  // =======================================================
 
   if (
     hostname === "youtube.com" ||
     hostname === "youtube-nocookie.com"
   ) {
-    // youtube.com/watch?v=VIDEO_ID
-    const watchId =
-      parsedUrl.searchParams.get("v");
+    // /watch?v=VIDEO_ID
+    const watchId = parsedUrl.searchParams.get("v");
 
     if (
       watchId &&
@@ -83,46 +80,42 @@ export function extractYoutubeVideoId(url) {
       return watchId;
     }
 
-    // youtube.com/live/VIDEO_ID
-    const liveMatch =
-      parsedUrl.pathname.match(
-        /^\/live\/([a-zA-Z0-9_-]{11})/
-      );
+    // /live/VIDEO_ID
+    const liveMatch = parsedUrl.pathname.match(
+      /^\/live\/([a-zA-Z0-9_-]{11})/
+    );
 
     if (liveMatch) {
       return liveMatch[1];
     }
 
-    // youtube.com/shorts/VIDEO_ID
-    const shortsMatch =
-      parsedUrl.pathname.match(
-        /^\/shorts\/([a-zA-Z0-9_-]{11})/
-      );
+    // /shorts/VIDEO_ID
+    const shortsMatch = parsedUrl.pathname.match(
+      /^\/shorts\/([a-zA-Z0-9_-]{11})/
+    );
 
     if (shortsMatch) {
       return shortsMatch[1];
     }
 
-    // youtube.com/embed/VIDEO_ID
-    const embedMatch =
-      parsedUrl.pathname.match(
-        /^\/embed\/([a-zA-Z0-9_-]{11})/
-      );
+    // /embed/VIDEO_ID
+    const embedMatch = parsedUrl.pathname.match(
+      /^\/embed\/([a-zA-Z0-9_-]{11})/
+    );
 
     if (embedMatch) {
       return embedMatch[1];
     }
   }
 
-  // -------------------------------------------------------
+  // =======================================================
   // YOUTU.BE
-  // -------------------------------------------------------
+  // =======================================================
 
   if (hostname === "youtu.be") {
-    const videoId =
-      parsedUrl.pathname
-        .split("/")
-        .filter(Boolean)[0];
+    const videoId = parsedUrl.pathname
+      .split("/")
+      .filter(Boolean)[0];
 
     if (
       videoId &&
@@ -137,7 +130,6 @@ export function extractYoutubeVideoId(url) {
   );
 }
 
-
 // =========================================================
 // SEARCH VIDEOS
 // =========================================================
@@ -146,11 +138,15 @@ export async function searchVideos(
   query,
   maxResults = 25
 ) {
+  if (!query || typeof query !== "string") {
+    throw new Error("Search query is required.");
+  }
+
   const data = await youtubeRequest("search", {
     part: "snippet",
     q: query,
     maxResults: String(
-      Math.min(maxResults, 50)
+      Math.min(Math.max(Number(maxResults) || 25, 1), 50)
     ),
     order: "relevance",
     type: "video",
@@ -184,7 +180,6 @@ export async function searchVideos(
     }));
 }
 
-
 // =========================================================
 // CHANNEL VIDEOS
 // =========================================================
@@ -193,11 +188,15 @@ export async function getChannelVideos(
   channelId,
   maxResults = 50
 ) {
+  if (!channelId) {
+    throw new Error("YouTube channel ID is required.");
+  }
+
   const data = await youtubeRequest("search", {
     part: "snippet",
     channelId,
     maxResults: String(
-      Math.min(maxResults, 50)
+      Math.min(Math.max(Number(maxResults) || 50, 1), 50)
     ),
     order: "date",
     type: "video",
@@ -231,7 +230,6 @@ export async function getChannelVideos(
     }));
 }
 
-
 // =========================================================
 // VIDEO DETAILS
 // =========================================================
@@ -260,8 +258,7 @@ export async function getVideoDetails(videoId) {
   }
 
   return {
-    youtubeId:
-      video.id,
+    youtubeId: video.id,
 
     title:
       video.snippet?.title || "",
@@ -289,14 +286,12 @@ export async function getVideoDetails(videoId) {
   };
 }
 
-
 // =========================================================
 // GET VIDEO FROM URL
 // =========================================================
 
 export async function getVideoFromUrl(url) {
-  const videoId =
-    extractYoutubeVideoId(url);
+  const videoId = extractYoutubeVideoId(url);
 
   console.log(
     `Extracted YouTube video ID: ${videoId}`

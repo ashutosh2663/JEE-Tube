@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "server": "node server/index.mjs",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"
@@ -13,7 +14,9 @@
     "@google/genai": "^2.16.0",
     "@supabase/supabase-js": "^2.112.2",
     "@tailwindcss/vite": "^4.3.3",
+    "cors": "^2.8.6",
     "dotenv": "^17.4.2",
+    "express": "^5.2.1",
     "framer-motion": "^13.0.0",
     "lucide-react": "^1.28.0",
     "react": "^19.2.8",
