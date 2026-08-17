@@ -1,66 +1,136 @@
-﻿import "dotenv/config";
-import express from "express";
-import cors from "cors";
+import "dotenv/config";
+import app from "./app.mjs";
 
-import adminRouter from "./routes/admin.mjs";
+// =========================================================
+// SERVER CONFIGURATION
+// =========================================================
 
-const app = express();
 const PORT = Number(process.env.PORT) || 3001;
+const HOST = process.env.HOST || "0.0.0.0";
 
-app.use(
-cors({
-origin: true,
-credentials: true,
-})
-);
+const SERVER_NAME = "JEE-TUBE API SERVER";
 
-app.use(express.json());
 
-app.get("/api/health", (req, res) => {
-res.json({
-success: true,
-message: "JEE-Tube API is running.",
-});
-});
+// =========================================================
+// STARTUP LOG
+// =========================================================
 
-app.use("/api/admin", adminRouter);
+function printStartupInfo() {
+  console.log("");
+  console.log("========================================");
+  console.log(`        ${SERVER_NAME}`);
+  console.log("========================================");
+  console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
+  console.log(`Host:        ${HOST}`);
+  console.log(`Port:        ${PORT}`);
+  console.log("");
+  console.log(`API:         http://127.0.0.1:${PORT}`);
+  console.log(`Health:      http://127.0.0.1:${PORT}/api/health`);
+  console.log(`Admin:       http://127.0.0.1:${PORT}/api/admin`);
+  console.log("");
+  console.log("Server status: READY");
+  console.log("========================================");
+  console.log("");
+}
 
-app.use((req, res) => {
-res.status(404).json({
-success: false,
-error: `API route not found: ${req.method} ${req.originalUrl}`,
-});
-});
 
-app.use((error, req, res, next) => {
-console.error("API error:", error);
+// =========================================================
+// ERROR HANDLING
+// =========================================================
 
-res.status(500).json({
-success: false,
-error: error?.message || "Internal server error.",
-});
-});
+function handleServerError(error) {
+  console.error("");
+  console.error("========================================");
+  console.error("        JEE-TUBE SERVER ERROR");
+  console.error("========================================");
+  console.error(error);
+  console.error("========================================");
+  console.error("");
 
-const server = app.listen(PORT, "127.0.0.1", () => {
-console.log("");
-console.log("========================================");
-console.log("        JEE-TUBE API SERVER");
-console.log("========================================");
-console.log(`API:    http://localhost:${PORT}`);
-console.log(`Health: http://localhost:${PORT}/api/health`);
-console.log(`Admin:  http://localhost:${PORT}/api/admin`);
-console.log("========================================");
-console.log("");
-});
+  if (error?.code === "EADDRINUSE") {
+    console.error(
+      `Port ${PORT} is already being used by another process.`
+    );
+    console.error(
+      `Stop the existing server or change PORT in .env.`
+    );
+  }
 
-server.on("error", (error) => {
-console.error("SERVER START ERROR:", error);
-});
+  process.exitCode = 1;
+}
+
+
+// =========================================================
+// GRACEFUL SHUTDOWN
+// =========================================================
+
+function setupShutdown(server) {
+  const shutdown = (signal) => {
+    console.log("");
+    console.log(`Received ${signal}. Shutting down JEE-Tube API...`);
+
+    server.close((error) => {
+      if (error) {
+        console.error(
+          "Error while shutting down server:",
+          error
+        );
+
+        process.exit(1);
+      }
+
+      console.log("JEE-Tube API stopped successfully.");
+      process.exit(0);
+    });
+
+    // Safety timeout
+    setTimeout(() => {
+      console.error(
+        "Forced shutdown: server did not close in time."
+      );
+
+      process.exit(1);
+    }, 10_000).unref();
+  };
+
+  process.once("SIGINT", () => shutdown("SIGINT"));
+  process.once("SIGTERM", () => shutdown("SIGTERM"));
+}
+
+
+// =========================================================
+// UNHANDLED ERRORS
+// =========================================================
 
 process.on("uncaughtException", (error) => {
-console.error("UNCAUGHT EXCEPTION:", error);
+  console.error("");
+  console.error("UNCAUGHT EXCEPTION:");
+  console.error(error);
 });
 
-process.on("unhandledRejection", (error) => {
-console.error("UNHANDLED REJECTION:", error);
+process.on("unhandledRejection", (reason) => {
+  console.error("");
+  console.error("UNHANDLED PROMISE REJECTION:");
+  console.error(reason);
 });
+
+
+// =========================================================
+// START SERVER
+// =========================================================
+
+try {
+  const server = app.listen(
+    PORT,
+    HOST,
+    () => {
+      printStartupInfo();
+      setupShutdown(server);
+    }
+  );
+
+  server.on("error", handleServerError);
+
+} catch (error) {
+  handleServerError(error);
+}
